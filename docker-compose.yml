@@ -1,0 +1,47 @@
+version: "3.9"
+
+# TODO: Add healthchecks, resource limits, and production-grade secrets management
+# (e.g. Docker secrets or an external vault) before deploying beyond local dev.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: supportops-ai-api:local
+    container_name: supportops-ai-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app/backend
+    # TODO: swap to a production ASGI command (no --reload) for non-dev environments.
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: supportops-ai-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-supportops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-supportops}
+      POSTGRES_DB: ${POSTGRES_DB:-supportops_ai}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: supportops-ai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
