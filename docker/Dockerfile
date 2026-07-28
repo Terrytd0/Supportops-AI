@@ -19,6 +19,9 @@ RUN apt-get update \
 COPY pyproject.toml README.md ./
 COPY backend ./backend
 
+COPY alembic ./alembic
+COPY alembic.ini ./
+
 RUN pip install --upgrade pip \
     && pip install -e "."
 

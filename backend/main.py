@@ -1,6 +1,6 @@
 """FastAPI application entry point.
 
-TODO: register additional routers as they are implemented (auth, tickets,
+TODO: register additional routers as they are implemented (tickets,
 conversations, agent runs), mount middleware (backend/api/middleware), and
 add startup/shutdown hooks for database and Redis connection lifecycles.
 """
@@ -8,6 +8,7 @@ add startup/shutdown hooks for database and Redis connection lifecycles.
 from fastapi import FastAPI
 
 from backend.api.routes.health import router as health_router
+from backend.auth.router import router as auth_router
 from backend.config.settings import get_settings
 
 settings = get_settings()
@@ -20,6 +21,7 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(auth_router)
 
 
 @app.get("/")

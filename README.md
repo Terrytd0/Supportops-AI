@@ -88,15 +88,33 @@ supportops-ai/
 │   ├── policy/                   # Routing, escalation, and guardrail business rules
 │   │   ├── __init__.py
 │   │   └── README.md
+│   │
 │   ├── auth/                     # JWT/OAuth2 authentication & authorization
 │   │   ├── __init__.py
-│   │   └── README.md
+│   │   ├── README.md
+│   │   ├── hashing.py             # Password hashing/verification (passlib/bcrypt)
+│   │   ├── jwt.py                 # Access-token issuance & verification (python-jose)
+│   │   ├── dependencies.py        # get_current_user, get_current_active_user, require_role
+│   │   └── router.py              # POST /auth/login, GET /auth/me
+│   ├── core/                     # Framework-level infra shared across the API
+│   │   ├── __init__.py
+│   │   ├── README.md
+│   │   └── security.py            # OAuth2PasswordBearer scheme, 401/403 exceptions
 │   │
 │   ├── database/
 │   │   ├── __init__.py
 │   │   ├── README.md
+│   │   ├── base.py                # Declarative Base + UUID/timestamp mixins
+│   │   ├── session.py             # Async engine + session factory
+│   │   ├── enums.py               # UserRole, CustomerTier, TicketPriority/Status, ApprovalStatus
 │   │   ├── models/                # SQLAlchemy declarative models
-│   │   │   └── __init__.py
+│   │   │   ├── __init__.py
+│   │   │   ├── user.py
+│   │   │   ├── customer.py
+│   │   │   ├── ticket.py
+│   │   │   ├── agent_run.py
+│   │   │   ├── approval_request.py
+│   │   │   └── audit_log.py
 │   │   ├── migrations/            # Alembic migration environment
 │   │   │   └── README.md
 │   │   └── repositories/          # Repository-pattern data access
@@ -110,7 +128,8 @@ supportops-ai/
 │   │   └── README.md
 │   ├── schemas/                  # Pydantic request/response & internal contracts
 │   │   ├── __init__.py
-│   │   └── README.md
+│   │   ├── README.md
+│   │   └── auth.py                # Token, AuthenticatedUser
 │   └── config/                   # Settings (env-driven configuration)
 │       ├── __init__.py
 │       ├── README.md

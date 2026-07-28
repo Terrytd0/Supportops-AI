@@ -39,6 +39,11 @@ dependencies = [
     # --- Auth ---
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
+    # passlib 1.7.4 (unmaintained since 2020) probes bcrypt.__about__, which
+    # bcrypt>=4.1 removed; that break also trips a stricter 72-byte check in
+    # passlib's own self-test. Pin below the break until passlib is replaced
+    # or patches this.
+    "bcrypt<4.1",
     "python-multipart>=0.0.9",
 
     # --- HTTP client ---
