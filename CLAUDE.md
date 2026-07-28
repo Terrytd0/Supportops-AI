@@ -18,12 +18,19 @@ modules contain structure and `TODO` markers only — no business logic.
 - `backend/agents/` — Domain-specific agent implementations (billing, technical, account, general).
 - `backend/graph/` — LangGraph state graph definitions wiring agents together.
 - `backend/policy/` — Business rules, guardrails, and routing/escalation policy.
-- `backend/auth/` — JWT/OAuth2 authentication and authorization.
-- `backend/database/` — SQLAlchemy models, Alembic migrations, repository pattern data access.
+- `backend/auth/` — JWT/OAuth2 authentication and authorization, including the
+  `Depends`-compatible dependencies routes use (`get_current_user`, `require_role`, ...).
+- `backend/core/` — Framework-level security infra (`OAuth2PasswordBearer` scheme,
+  shared 401/403 exceptions) that isn't itself auth-domain logic.
+- `backend/database/` — SQLAlchemy models and repository pattern data access.
+  Alembic migrations live at the repo root (`alembic/`), not here — see
+  `backend/database/migrations/README.md`.
 - `backend/services/` — Application/business services orchestrating repositories and agents.
 - `backend/tools/` — Tool implementations exposed to agents (e.g. CRM lookups, ticket systems).
 - `backend/schemas/` — Pydantic request/response and internal data contracts.
 - `backend/config/` — Settings and environment configuration.
+- `backend/scripts/` — One-off scripts run via `python -m backend.scripts.<name>`
+  (e.g. `seed.py`), reusing the app's existing session/models/utilities.
 - `tests/` — `unit/`, `integration/`, and `fixtures/` mirroring the backend structure.
 - `docs/` — Architecture, requirements, assumptions, decisions, and ADRs.
 

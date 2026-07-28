@@ -28,6 +28,28 @@ short-term memory).
 - JWT / OAuth2 authentication
 - Pytest
 
+## Authentication
+
+SupportOps AI uses **OAuth2 Password Flow** with **JWT (JSON Web Tokens)** for authentication and authorization.
+
+The authentication system includes:
+
+- OAuth2 Password authentication
+- JWT access token generation
+- Password hashing using bcrypt
+- Protected API endpoints
+- Current authenticated user endpoint (`GET /auth/me`)
+- Interactive testing through Swagger UI
+
+The screenshot below demonstrates:
+
+- Successful authentication via `POST /auth/login`
+- JWT access token issuance
+- Authenticated request to `GET /auth/me`
+- Retrieval of the currently authenticated user
+
+![Authentication Flow](docs/screenshots/authentication-flow.png)
+
 ## Repository Layout
 
 ```
@@ -40,6 +62,13 @@ supportops-ai/
 ├── .env.example
 ├── pyproject.toml
 ├── docker-compose.yml
+├── alembic.ini
+│
+├── alembic/                      # Alembic migration environment (async, targets Base.metadata)
+│   ├── README
+│   ├── env.py
+│   ├── script.py.mako
+│   └── versions/                 # Generated migration scripts
 │
 ├── .github/
 │   └── workflows/
@@ -52,8 +81,10 @@ supportops-ai/
 │   ├── database_schema.md
 │   ├── decisions.md
 │   ├── design_review.md
-│   └── adr/
-│       └── ADR-001-langgraph-vs-crewai.md
+│   ├── adr/
+│   │   └── ADR-001-langgraph-vs-crewai.md
+│   └── screenshots/
+│       └── authentication-flow.png
 │
 ├── backend/
 │   ├── __init__.py
@@ -130,10 +161,14 @@ supportops-ai/
 │   │   ├── __init__.py
 │   │   ├── README.md
 │   │   └── auth.py                # Token, AuthenticatedUser
-│   └── config/                   # Settings (env-driven configuration)
+│   ├── config/                   # Settings (env-driven configuration)
+│   │   ├── __init__.py
+│   │   ├── README.md
+│   │   └── settings.py
+│   └── scripts/                  # One-off scripts (python -m backend.scripts.<name>)
 │       ├── __init__.py
 │       ├── README.md
-│       └── settings.py
+│       └── seed.py                # Idempotent dev-data seed (users, customers, tickets)
 │
 ├── tests/
 │   ├── README.md
@@ -174,6 +209,17 @@ uvicorn backend.main:app --reload
 
 # Run the full stack (API + Postgres + Redis)
 docker compose up --build
+```
+
+### Database migrations & seeding
+
+```bash
+# Apply migrations (schema)
+alembic upgrade head
+
+# Seed baseline dev data: 4 users, 5 demo customers, 15 demo tickets.
+# Idempotent -- safe to run more than once.
+python -m backend.scripts.seed
 ```
 
 ### Running tests
