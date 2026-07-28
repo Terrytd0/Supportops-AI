@@ -16,6 +16,7 @@ app = FastAPI(
     title=settings.app_name,
     description="Enterprise-grade multi-agent customer support platform.",
     version="0.1.0",
+    debug=settings.debug,
 )
 
 app.include_router(health_router)

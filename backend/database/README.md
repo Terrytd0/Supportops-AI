@@ -9,7 +9,8 @@ Persistence layer.
 
 ## TODO
 
-- [ ] Add async engine/session factory and declarative base (likely `database/session.py`)
+- [x] Add async engine/session factory and declarative base (`base.py`, `session.py`)
+- [x] Define domain models per `docs/database_schema.md` (`models/`)
 - [ ] Initialize Alembic (`alembic init`) targeting `migrations/`
-- [ ] Define initial domain models (e.g. Ticket, Conversation, Message, User)
 - [ ] Define repository interfaces per model/aggregate
+- [ ] Add a FastAPI dependency yielding a request-scoped `AsyncSession`

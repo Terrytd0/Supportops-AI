@@ -36,59 +36,100 @@ supportops-ai/
 ├── CLAUDE.md
 ├── LICENSE
 ├── .gitignore
+├── .env                          # Local environment overrides (git-ignored)
 ├── .env.example
 ├── pyproject.toml
 ├── docker-compose.yml
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml                # Lint + test CI pipeline (scaffold)
 │
 ├── docs/
 │   ├── architecture.md
 │   ├── business_requirements.md
 │   ├── assumptions.md
+│   ├── database_schema.md
 │   ├── decisions.md
 │   ├── design_review.md
 │   └── adr/
 │       └── ADR-001-langgraph-vs-crewai.md
 │
 ├── backend/
-│   ├── main.py                  # FastAPI application entry point
+│   ├── __init__.py
+│   ├── main.py                   # FastAPI application entry point
 │   │
 │   ├── api/
+│   │   ├── __init__.py
+│   │   ├── README.md
 │   │   ├── routes/               # APIRouter modules (e.g. health)
+│   │   │   ├── __init__.py
+│   │   │   └── health.py
 │   │   ├── dependencies/         # FastAPI Depends providers (auth, db session, ...)
+│   │   │   └── __init__.py
 │   │   └── middleware/           # ASGI middleware (logging, correlation IDs, ...)
+│   │       └── __init__.py
 │   │
 │   ├── agents/
+│   │   ├── __init__.py
+│   │   ├── README.md
 │   │   ├── billing/               # Billing support agent
+│   │   │   └── __init__.py
 │   │   ├── technical/             # Technical support agent
+│   │   │   └── __init__.py
 │   │   ├── account/               # Account management agent
-│   │   └── manager/                # General/supervisor agent (triage, routing, escalation)
+│   │   │   └── __init__.py
+│   │   └── general/               # General supports agent
+│   │       └── __init__.py
 │   │
 │   ├── graph/                    # LangGraph state graph wiring agents together
+│   │   ├── __init__.py
+│   │   └── README.md
 │   ├── policy/                   # Routing, escalation, and guardrail business rules
+│   │   ├── __init__.py
+│   │   └── README.md
 │   ├── auth/                     # JWT/OAuth2 authentication & authorization
+│   │   ├── __init__.py
+│   │   └── README.md
 │   │
 │   ├── database/
+│   │   ├── __init__.py
+│   │   ├── README.md
 │   │   ├── models/                # SQLAlchemy declarative models
+│   │   │   └── __init__.py
 │   │   ├── migrations/            # Alembic migration environment
+│   │   │   └── README.md
 │   │   └── repositories/          # Repository-pattern data access
+│   │       └── __init__.py
 │   │
 │   ├── services/                 # Application services (routes depend on these)
+│   │   ├── __init__.py
+│   │   └── README.md
 │   ├── tools/                    # Tool implementations exposed to agents
+│   │   ├── __init__.py
+│   │   └── README.md
 │   ├── schemas/                  # Pydantic request/response & internal contracts
+│   │   ├── __init__.py
+│   │   └── README.md
 │   └── config/                   # Settings (env-driven configuration)
+│       ├── __init__.py
+│       ├── README.md
+│       └── settings.py
 │
 ├── tests/
+│   ├── README.md
 │   ├── conftest.py
 │   ├── unit/                     # Fast, isolated tests (mirrors backend/)
+│   │   ├── README.md
+│   │   └── test_main.py
 │   ├── integration/              # Tests against real Postgres/Redis
+│   │   └── README.md
 │   └── fixtures/                 # Shared fixtures, factories, sample data
+│       └── README.md
 │
-├── docker/
-│   └── Dockerfile
-│
-└── .github/
-    └── workflows/
-        └── ci.yml                # Lint + test CI pipeline (scaffold)
+└── docker/
+    ├── Dockerfile
+    └── README.md
 ```
 
 Every backend subpackage, `docs/`, `tests/`, and `docker/` folder has its own

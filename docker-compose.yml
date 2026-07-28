@@ -1,38 +1,44 @@
-version: "3.9"
-
-# TODO: Add healthchecks, resource limits, and production-grade secrets management
-# (e.g. Docker secrets or an external vault) before deploying beyond local dev.
-
 services:
   api:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    image: supportops-ai-api:local
     container_name: supportops-ai-api
     ports:
       - "8000:8000"
     env_file:
       - .env
-    depends_on:
-      - postgres
-      - redis
     volumes:
       - ./backend:/app/backend
-    # TODO: swap to a production ASGI command (no --reload) for non-dev environments.
-    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+    networks:
+      - supportops-network
 
   postgres:
     image: postgres:16-alpine
     container_name: supportops-ai-postgres
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-supportops}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-supportops}
       POSTGRES_DB: ${POSTGRES_DB:-supportops_ai}
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-supportops} -d ${POSTGRES_DB:-supportops_ai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - supportops-network
 
   redis:
     image: redis:7-alpine
@@ -41,7 +47,26 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - supportops-network
+
+  adminer:
+    image: adminer:latest
+    container_name: supportops-ai-adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - supportops-network
 
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  supportops-network:
+    driver: bridge
