@@ -11,9 +11,10 @@ and **CrewAI** (role-based agent collaboration), exposed via a **FastAPI**
 backend, and backed by **PostgreSQL** (persistence) and **Redis** (caching /
 short-term memory).
 
-> Status: Sprint 4 scaffold. No business logic has been implemented yet — see
-> `TODO` markers throughout the codebase and `docs/decisions.md` for what's
-> pending.
+> Status: Sprint 4 scaffold. The LangGraph workflow orchestration backbone
+> (`backend/graph/`) is implemented with deterministic placeholder logic;
+> everything else is still `TODO` — see `TODO` markers throughout the
+> codebase and `docs/decisions.md` for what's pending.
 
 ## Tech Stack
 
@@ -21,6 +22,7 @@ short-term memory).
 - FastAPI
 - LangGraph
 - CrewAI
+- OpenAI (LLM provider, via `langchain-openai`)
 - PostgreSQL + SQLAlchemy + Alembic
 - Redis
 - Docker / Docker Compose
@@ -48,7 +50,23 @@ The screenshot below demonstrates:
 - Authenticated request to `GET /auth/me`
 - Retrieval of the currently authenticated user
 
-![Authentication Flow](docs/screenshots/authentication-flow.png)
+![Authentication Flow](docs/screenshots/01-authentication-flow.png)
+
+## Workflow Orchestration
+
+The LangGraph workflow backbone (`backend/graph/`) compiles a fixed graph —
+`load_ticket → classify_ticket → select_agent → execute_agent →
+confidence_evaluation → persist_results` — with deterministic placeholder
+logic in every node, ready for real classification, CrewAI agents, and
+persistence to be dropped in without changing the topology.
+
+![Compiled Workflow Graph](docs/screenshots/02-workflow.png)
+
+Running `python -m backend.scripts.run_workflow` against the sample ticket
+"I was billed twice for my subscription" routes it to the billing agent end
+to end:
+
+![LangGraph Smoke Test](docs/screenshots/03-langgraph-smoke-test.png)
 
 ## Repository Layout
 
@@ -84,7 +102,9 @@ supportops-ai/
 │   ├── adr/
 │   │   └── ADR-001-langgraph-vs-crewai.md
 │   └── screenshots/
-│       └── authentication-flow.png
+│       ├── 01-authentication-flow.png
+│       ├── 02-workflow.png
+│       └── 03-langgraph-smoke-test.png
 │
 ├── backend/
 │   ├── __init__.py
@@ -93,29 +113,40 @@ supportops-ai/
 │   ├── api/
 │   │   ├── __init__.py
 │   │   ├── README.md
+│   │   │
 │   │   ├── routes/               # APIRouter modules (e.g. health)
 │   │   │   ├── __init__.py
 │   │   │   └── health.py
+│   │   │
 │   │   ├── dependencies/         # FastAPI Depends providers (auth, db session, ...)
 │   │   │   └── __init__.py
+│   │   │
 │   │   └── middleware/           # ASGI middleware (logging, correlation IDs, ...)
 │   │       └── __init__.py
 │   │
 │   ├── agents/
 │   │   ├── __init__.py
 │   │   ├── README.md
+│   │   │
 │   │   ├── billing/               # Billing support agent
 │   │   │   └── __init__.py
+│   │   │
 │   │   ├── technical/             # Technical support agent
 │   │   │   └── __init__.py
+│   │   │
 │   │   ├── account/               # Account management agent
 │   │   │   └── __init__.py
-│   │   └── general/               # General supports agent
+│   │   │
+│   │   └── general/               # General support agent
 │   │       └── __init__.py
 │   │
-│   ├── graph/                    # LangGraph state graph wiring agents together
+│   ├── graph/                     # LangGraph workflow orchestration backbone
 │   │   ├── __init__.py
-│   │   └── README.md
+│   │   ├── README.md
+│   │   ├── state.py               # WorkflowState + TicketCategory/SupportAgentType/WorkflowStatus enums
+│   │   ├── nodes.py                # load_ticket, classify_ticket, select_agent, execute_agent, confidence_evaluation, persist_results
+│   │   └── workflow.py             # build_workflow() / get_graph() — compiles the node graph
+│   │
 │   ├── policy/                   # Routing, escalation, and guardrail business rules
 │   │   ├── __init__.py
 │   │   └── README.md
@@ -127,6 +158,7 @@ supportops-ai/
 │   │   ├── jwt.py                 # Access-token issuance & verification (python-jose)
 │   │   ├── dependencies.py        # get_current_user, get_current_active_user, require_role
 │   │   └── router.py              # POST /auth/login, GET /auth/me
+│   │
 │   ├── core/                     # Framework-level infra shared across the API
 │   │   ├── __init__.py
 │   │   ├── README.md
@@ -138,6 +170,7 @@ supportops-ai/
 │   │   ├── base.py                # Declarative Base + UUID/timestamp mixins
 │   │   ├── session.py             # Async engine + session factory
 │   │   ├── enums.py               # UserRole, CustomerTier, TicketPriority/Status, ApprovalStatus
+│   │   │
 │   │   ├── models/                # SQLAlchemy declarative models
 │   │   │   ├── __init__.py
 │   │   │   ├── user.py
@@ -146,38 +179,50 @@ supportops-ai/
 │   │   │   ├── agent_run.py
 │   │   │   ├── approval_request.py
 │   │   │   └── audit_log.py
+│   │   │
 │   │   ├── migrations/            # Alembic migration environment
 │   │   │   └── README.md
+│   │   │
 │   │   └── repositories/          # Repository-pattern data access
 │   │       └── __init__.py
 │   │
 │   ├── services/                 # Application services (routes depend on these)
 │   │   ├── __init__.py
 │   │   └── README.md
+│   │
 │   ├── tools/                    # Tool implementations exposed to agents
 │   │   ├── __init__.py
 │   │   └── README.md
+│   │
 │   ├── schemas/                  # Pydantic request/response & internal contracts
 │   │   ├── __init__.py
 │   │   ├── README.md
 │   │   └── auth.py                # Token, AuthenticatedUser
+│   │
 │   ├── config/                   # Settings (env-driven configuration)
 │   │   ├── __init__.py
 │   │   ├── README.md
 │   │   └── settings.py
+│   │
 │   └── scripts/                  # One-off scripts (python -m backend.scripts.<name>)
 │       ├── __init__.py
 │       ├── README.md
-│       └── seed.py                # Idempotent dev-data seed (users, customers, tickets)
+│       ├── seed.py                # Idempotent dev-data seed (users, customers, tickets)
+│       ├── run_workflow.py        # Runs the compiled LangGraph workflow against a sample ticket
+│       ├── export_workflow.py     # Renders the compiled graph to workflow.png (Mermaid)
+│       └── test_openai.py         # Manual OpenAI/langchain-openai connectivity smoke test
 │
 ├── tests/
 │   ├── README.md
 │   ├── conftest.py
+│   │
 │   ├── unit/                     # Fast, isolated tests (mirrors backend/)
 │   │   ├── README.md
 │   │   └── test_main.py
+│   │
 │   ├── integration/              # Tests against real Postgres/Redis
 │   │   └── README.md
+│   │
 │   └── fixtures/                 # Shared fixtures, factories, sample data
 │       └── README.md
 │
@@ -220,6 +265,15 @@ alembic upgrade head
 # Seed baseline dev data: 4 users, 5 demo customers, 15 demo tickets.
 # Idempotent -- safe to run more than once.
 python -m backend.scripts.seed
+```
+
+### Running the LangGraph workflow
+
+```bash
+# Runs the compiled workflow against a sample ticket and prints the final
+# state. No LLM, database, or Redis required -- every node is a deterministic
+# placeholder (see backend/graph/README.md).
+python -m backend.scripts.run_workflow
 ```
 
 ### Running tests

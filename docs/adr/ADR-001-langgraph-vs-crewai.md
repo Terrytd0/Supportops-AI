@@ -6,10 +6,7 @@ Accepted — Sprint 4
 
 ## Context
 
-SupportOps AI needs to orchestrate multiple specialized support agents
-(billing, technical, account, General) under a manager/supervisor agent, with reliable
-control flow, state persistence, and human-in-the-loop escalation. Two
-candidate frameworks are in the stack: **LangGraph** and **CrewAI**.
+SupportOps AI needs to orchestrate multiple specialized support agents (Billing, Technical, Account, General) using deterministic workflow control, state persistence, conditional routing, and human-in-the-loop escalation. To satisfy these requirements, the project adopts both LangGraph and CrewAI, with each framework serving a distinct responsibility.
 
 - **LangGraph** provides explicit, graph-based control flow with first-class
   state persistence/checkpointing, conditional routing, and cycles — well

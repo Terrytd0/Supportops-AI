@@ -28,7 +28,14 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
 
+    # --- LLM ---
+    llm_provider: str = "openai"
+    openai_api_key: str = ""
+    llm_model: str = "gpt-5.4-mini"
+
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+settings = get_settings()
