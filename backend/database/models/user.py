@@ -35,11 +35,11 @@ class User(UUIDPrimaryKeyMixin, CreatedAtUpdatedAtMixin, Base):
         Boolean, nullable=False, default=True, server_default=text("true")
     )
 
-    assigned_tickets: Mapped[list["Ticket"]] = relationship(back_populates="assigned_agent")
-    requested_approvals: Mapped[list["ApprovalRequest"]] = relationship(
+    assigned_tickets: Mapped[list[Ticket]] = relationship(back_populates="assigned_agent")
+    requested_approvals: Mapped[list[ApprovalRequest]] = relationship(
         back_populates="requester", foreign_keys="ApprovalRequest.requested_by"
     )
-    decided_approvals: Mapped[list["ApprovalRequest"]] = relationship(
+    decided_approvals: Mapped[list[ApprovalRequest]] = relationship(
         back_populates="approver", foreign_keys="ApprovalRequest.approved_by"
     )
-    audit_logs: Mapped[list["AuditLog"]] = relationship(back_populates="user")
+    audit_logs: Mapped[list[AuditLog]] = relationship(back_populates="user")

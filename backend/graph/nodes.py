@@ -17,6 +17,7 @@ No node in this module performs I/O (no LLM calls, no database, no Redis).
 
 from __future__ import annotations
 
+from backend.core.logging import get_logger
 from backend.graph.state import (
     SupportAgentType,
     TicketCategory,
@@ -24,6 +25,8 @@ from backend.graph.state import (
     WorkflowStatus,
 )
 from backend.policy.rules import evaluate_policy
+
+logger = get_logger(__name__)
 
 # Placeholder confidence score used until execute_agent_node/classify_ticket_node
 # call a real model. TODO(OpenAI): replace with a score derived from the LLM's
@@ -68,6 +71,7 @@ def load_ticket_node(state: WorkflowState) -> dict:
     (`backend/database/repositories/`) that fetches the ticket by
     `ticket_id` instead of trusting the caller-supplied fields.
     """
+    logger.info("Workflow started for ticket %s", state["ticket_id"])
     return {
         "ticket_id": state["ticket_id"],
         "customer_id": state["customer_id"],
@@ -87,6 +91,7 @@ def classify_ticket_node(state: WorkflowState) -> dict:
         if keyword in text:
             category = matched_category
             break
+    logger.info("Ticket %s classified as %s", state["ticket_id"], category.value)
     return {"category": category}
 
 
@@ -97,7 +102,9 @@ def select_agent_node(state: WorkflowState) -> dict:
     (or adds load-balancing logic) without changing this node's contract.
     """
     category = state.get("category", TicketCategory.GENERAL)
-    return {"selected_agent": _AGENT_BY_CATEGORY[category]}
+    agent = _AGENT_BY_CATEGORY[category]
+    logger.info("Ticket %s routed to %s", state["ticket_id"], agent.value)
+    return {"selected_agent": agent}
 
 
 def execute_agent_node(state: WorkflowState) -> dict:
@@ -130,6 +137,12 @@ def confidence_evaluation_node(state: WorkflowState) -> dict:
         ticket_text=state["ticket_text"],
         confidence_score=confidence_score,
     )
+    logger.info(
+        "Policy evaluation for ticket %s: requires_human_review=%s (rules=%s)",
+        state["ticket_id"],
+        evaluation.requires_human_review,
+        evaluation.matched_rules,
+    )
     return {
         "confidence_score": confidence_score,
         "requires_human_review": evaluation.requires_human_review,
@@ -143,4 +156,5 @@ def persist_results_node(state: WorkflowState) -> dict:
     writes (the ticket, an `AgentRun`, and an `AuditLog` row) inside a
     transaction, keeping `workflow_status` as the last field set.
     """
+    logger.info("Workflow completed for ticket %s", state["ticket_id"])
     return {"workflow_status": WorkflowStatus.COMPLETED}

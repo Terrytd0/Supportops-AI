@@ -48,4 +48,4 @@ class AgentRun(UUIDPrimaryKeyMixin, Base):
         server_default=func.now(), nullable=False, index=True
     )
 
-    ticket: Mapped["Ticket"] = relationship(back_populates="agent_runs")
+    ticket: Mapped[Ticket] = relationship(back_populates="agent_runs")

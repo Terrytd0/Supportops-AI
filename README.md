@@ -161,6 +161,8 @@ supportops-ai/
 │   │
 │   ├── core/                     # Framework-level infra shared across the API
 │   │   ├── README.md
+│   │   ├── logging.py             # configure_logging(), get_logger() -- shared app logging
+│   │   ├── rate_limit.py          # limiter, configure_rate_limiting() -- shared slowapi rate limiting
 │   │   └── security.py            # OAuth2PasswordBearer scheme, 401/403 exceptions
 │   │
 │   ├── database/
@@ -203,6 +205,8 @@ supportops-ai/
 │       ├── seed.py                # Idempotent dev-data seed (users, customers, tickets)
 │       ├── run_workflow.py        # Runs the compiled LangGraph workflow against a sample ticket
 │       ├── export_workflow.py     # Renders the compiled graph to workflow.png (Mermaid)
+│       ├── load_test.py           # 50 concurrent requests against the running app; latency/throughput summary
+│       ├── load_test_tickets.py   # Sample ticket payloads used by load_test.py
 │       └── test_openai.py         # Manual OpenAI/langchain-openai connectivity smoke test
 │
 ├── tests/
@@ -214,6 +218,10 @@ supportops-ai/
 │   │   ├── test_main.py
 │   │   ├── api/
 │   │   │   └── test_supervisor.py
+│   │   │
+│   │   ├── core/
+│   │   │   ├── test_logging.py
+│   │   │   └── test_rate_limit.py
 │   │   │
 │   │   ├── graph/
 │   │   │   └── test_nodes.py

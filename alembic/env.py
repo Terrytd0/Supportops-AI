@@ -1,16 +1,13 @@
+import asyncio
 from logging.config import fileConfig
 
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
-import asyncio
 
+import backend.database.models  # noqa: F401 -- side-effect import: registers models on Base.metadata
+from alembic import context
 from backend.config.settings import get_settings
 from backend.database.base import Base
-
-# Import all models so they register with Base.metadata
-import backend.database.models
-
-from alembic import context
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

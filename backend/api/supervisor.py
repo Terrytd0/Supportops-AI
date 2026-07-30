@@ -17,8 +17,10 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
+from backend.core.logging import get_logger
+from backend.core.rate_limit import limiter
 from backend.database.enums import ApprovalStatus, TicketPriority
 from backend.schemas.supervisor import (
     ApprovalDecisionRequest,
@@ -28,7 +30,15 @@ from backend.schemas.supervisor import (
 )
 from backend.services.audit import log_audit_event
 
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/supervisor", tags=["supervisor"])
+
+# Looser than login: supervisors working the queue may approve/reject in
+# quick succession, but this still bounds abuse/runaway-client traffic.
+# Kept as a constant here, next to the routes it guards, so it's easy to
+# find and retune.
+_APPROVAL_DECISION_RATE_LIMIT = "30/minute"
 
 # Deterministic placeholder data standing in for a repository read against
 # `approval_requests`/`tickets`. TODO(Repository): replace with
@@ -79,8 +89,9 @@ async def get_queue_item(ticket_id: uuid.UUID) -> SupervisorQueueItem:
 
 
 @router.post("/{ticket_id}/approve", response_model=ApprovalDecisionResponse)
+@limiter.limit(_APPROVAL_DECISION_RATE_LIMIT)
 async def approve_ticket(
-    ticket_id: uuid.UUID, decision: ApprovalDecisionRequest
+    request: Request, ticket_id: uuid.UUID, decision: ApprovalDecisionRequest
 ) -> ApprovalDecisionResponse:
     """Approve a ticket's draft response for sending.
 
@@ -89,6 +100,7 @@ async def approve_ticket(
     the ticket status.
     """
     _find_placeholder_item(ticket_id)
+    logger.info("Supervisor approved ticket %s", ticket_id)
     log_audit_event(
         ticket_id=ticket_id,
         event_type="supervisor_approved",
@@ -104,8 +116,9 @@ async def approve_ticket(
 
 
 @router.post("/{ticket_id}/reject", response_model=ApprovalDecisionResponse)
+@limiter.limit(_APPROVAL_DECISION_RATE_LIMIT)
 async def reject_ticket(
-    ticket_id: uuid.UUID, decision: ApprovalDecisionRequest
+    request: Request, ticket_id: uuid.UUID, decision: ApprovalDecisionRequest
 ) -> ApprovalDecisionResponse:
     """Reject a ticket's draft response.
 
@@ -114,6 +127,7 @@ async def reject_ticket(
     the ticket status.
     """
     _find_placeholder_item(ticket_id)
+    logger.info("Supervisor rejected ticket %s", ticket_id)
     log_audit_event(
         ticket_id=ticket_id,
         event_type="supervisor_rejected",

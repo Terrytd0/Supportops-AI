@@ -1,7 +1,10 @@
-from pydantic import SecretStr
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 from backend.config.settings import settings
+from backend.core.logging import configure_logging, get_logger
+
+logger = get_logger(__name__)
 
 
 def main() -> None:
@@ -13,8 +16,9 @@ def main() -> None:
 
     response = llm.invoke("Say hello in one sentence.")
 
-    print("\nResponse:")
-    print(response.content)
+    logger.info("Response: %s", response.content)
+
 
 if __name__ == "__main__":
+    configure_logging()
     main()

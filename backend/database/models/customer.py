@@ -31,4 +31,4 @@ class Customer(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         pg_enum(CustomerTier, "customer_tier"), nullable=False
     )
 
-    tickets: Mapped[list["Ticket"]] = relationship(back_populates="customer")
+    tickets: Mapped[list[Ticket]] = relationship(back_populates="customer")

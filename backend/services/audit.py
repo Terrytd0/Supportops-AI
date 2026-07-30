@@ -16,11 +16,12 @@ the action being recorded.
 
 from __future__ import annotations
 
-import logging
 import uuid
 from typing import Any
 
-_logger = logging.getLogger("supportops.audit")
+from backend.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def log_audit_event(
@@ -45,8 +46,11 @@ def log_audit_event(
         user_id: The acting user, if any (None for system-generated events).
         metadata: Additional structured context for the event.
     """
-    _logger.info(
-        "audit_event",
+    logger.info(
+        "Audit log created: ticket=%s event_type=%s user=%s",
+        ticket_id,
+        event_type,
+        user_id if user_id is not None else "system",
         extra={
             "ticket_id": str(ticket_id),
             "user_id": str(user_id) if user_id is not None else None,

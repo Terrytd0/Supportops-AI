@@ -54,5 +54,5 @@ class AuditLog(UUIDPrimaryKeyMixin, Base):
         server_default=func.now(), nullable=False, index=True
     )
 
-    ticket: Mapped["Ticket"] = relationship(back_populates="audit_logs")
-    user: Mapped["User | None"] = relationship(back_populates="audit_logs")
+    ticket: Mapped[Ticket] = relationship(back_populates="audit_logs")
+    user: Mapped[User | None] = relationship(back_populates="audit_logs")

@@ -32,11 +32,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.hashing import hash_password
 from backend.config.settings import get_settings
+from backend.core.logging import configure_logging, get_logger
 from backend.database.enums import CustomerTier, TicketPriority, TicketStatus, UserRole
 from backend.database.models.customer import Customer
 from backend.database.models.ticket import Ticket
 from backend.database.models.user import User
 from backend.database.session import async_session_factory
+
+logger = get_logger(__name__)
 
 # --------------------------------------------------------------------------
 # Seed data
@@ -345,7 +348,7 @@ async def _already_seeded(session: AsyncSession) -> bool:
 
 async def _seed_users(session: AsyncSession) -> dict[str, User]:
     """Create the default users; return them keyed by email for lookup."""
-    print("Creating users...")
+    logger.info("Creating users...")
     users: dict[str, User] = {}
     for spec in _USERS:
         user = User(
@@ -363,7 +366,7 @@ async def _seed_users(session: AsyncSession) -> dict[str, User]:
 
 async def _seed_customers(session: AsyncSession) -> list[Customer]:
     """Create the demo customers, in `_CUSTOMERS` order."""
-    print("Creating customers...")
+    logger.info("Creating customers...")
     customers = [
         Customer(
             name=spec["name"],
@@ -384,7 +387,7 @@ async def _seed_tickets(
     users: dict[str, User],
 ) -> None:
     """Create the demo tickets, wired to `customers`/`users` via relationships."""
-    print("Creating tickets...")
+    logger.info("Creating tickets...")
     tickets = [
         Ticket(
             customer=customers[spec["customer_index"]],
@@ -409,7 +412,7 @@ async def seed() -> None:
     """
     settings = get_settings()
     if settings.environment == "production" and not os.environ.get("ALLOW_SEED_IN_PRODUCTION"):
-        print(
+        logger.error(
             "Refusing to run the dev seed script against a production "
             "database (ENVIRONMENT=production). Set "
             "ALLOW_SEED_IN_PRODUCTION=1 to override."
@@ -419,7 +422,7 @@ async def seed() -> None:
     async with async_session_factory() as session:
         try:
             if await _already_seeded(session):
-                print("Database already seeded. Skipping.")
+                logger.info("Database already seeded. Skipping.")
                 return
 
             users = await _seed_users(session)
@@ -427,14 +430,16 @@ async def seed() -> None:
             await _seed_tickets(session, customers, users)
 
             await session.commit()
-            print("Database seeded successfully.")
+            logger.info("Database seeded successfully.")
         except Exception:
+            logger.error("Seeding failed; rolling back transaction.", exc_info=True)
             await session.rollback()
             raise
 
 
 def main() -> None:
     """Entry point for `python -m backend.scripts.seed`."""
+    configure_logging()
     asyncio.run(seed())
 
 

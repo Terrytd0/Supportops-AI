@@ -51,10 +51,10 @@ class ApprovalRequest(UUIDPrimaryKeyMixin, Base):
     requested_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     decided_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
-    ticket: Mapped["Ticket"] = relationship(back_populates="approval_requests")
-    requester: Mapped["User"] = relationship(
+    ticket: Mapped[Ticket] = relationship(back_populates="approval_requests")
+    requester: Mapped[User] = relationship(
         back_populates="requested_approvals", foreign_keys=[requested_by]
     )
-    approver: Mapped["User | None"] = relationship(
+    approver: Mapped[User | None] = relationship(
         back_populates="decided_approvals", foreign_keys=[approved_by]
     )

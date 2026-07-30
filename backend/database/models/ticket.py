@@ -64,8 +64,8 @@ class Ticket(UUIDPrimaryKeyMixin, CreatedAtUpdatedAtMixin, Base):
         server_default=func.now(), nullable=False, index=True
     )
 
-    customer: Mapped["Customer"] = relationship(back_populates="tickets")
-    assigned_agent: Mapped["User | None"] = relationship(back_populates="assigned_tickets")
-    agent_runs: Mapped[list["AgentRun"]] = relationship(back_populates="ticket")
-    audit_logs: Mapped[list["AuditLog"]] = relationship(back_populates="ticket")
-    approval_requests: Mapped[list["ApprovalRequest"]] = relationship(back_populates="ticket")
+    customer: Mapped[Customer] = relationship(back_populates="tickets")
+    assigned_agent: Mapped[User | None] = relationship(back_populates="assigned_tickets")
+    agent_runs: Mapped[list[AgentRun]] = relationship(back_populates="ticket")
+    audit_logs: Mapped[list[AuditLog]] = relationship(back_populates="ticket")
+    approval_requests: Mapped[list[ApprovalRequest]] = relationship(back_populates="ticket")

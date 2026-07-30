@@ -13,8 +13,11 @@ from __future__ import annotations
 import uuid
 from typing import cast
 
+from backend.core.logging import configure_logging, get_logger
 from backend.graph.state import WorkflowState, WorkflowStatus
 from backend.graph.workflow import get_graph
+
+logger = get_logger(__name__)
 
 _SAMPLE_TICKET_TEXT = "I was billed twice for my subscription."
 
@@ -35,18 +38,19 @@ def run() -> WorkflowState:
     return cast(WorkflowState, graph.invoke(_initial_state()))
 
 
-def _print_state(state: WorkflowState) -> None:
-    """Print the final workflow state as aligned `field: value` lines."""
-    print("Final workflow state:")
+def _log_state(state: WorkflowState) -> None:
+    """Log the final workflow state as aligned `field: value` lines."""
+    logger.info("Final workflow state:")
     width = max(len(key) for key in state)
     for key, value in state.items():
-        print(f"  {key.ljust(width)} : {value}")
+        logger.info("  %s : %s", key.ljust(width), value)
 
 
 def main() -> None:
     """Entry point for `python -m backend.scripts.run_workflow`."""
+    configure_logging()
     final_state = run()
-    _print_state(final_state)
+    _log_state(final_state)
 
 
 if __name__ == "__main__":

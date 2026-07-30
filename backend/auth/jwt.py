@@ -7,7 +7,7 @@ lookup (`auth/dependencies.py`) are deliberately kept out of this module.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from jose import jwt as jose_jwt
 from pydantic import BaseModel
@@ -37,7 +37,7 @@ def create_access_token(
     exposed mainly so callers (tests, refresh-token logic) aren't tied to
     wall-clock timing.
     """
-    expire = datetime.now(timezone.utc) + (
+    expire = datetime.now(UTC) + (
         expires_delta or timedelta(minutes=settings.jwt_access_token_expire_minutes)
     )
     claims = {"sub": str(user_id), "role": role.value, "exp": expire}
