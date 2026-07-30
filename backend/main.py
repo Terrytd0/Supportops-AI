@@ -8,6 +8,7 @@ add startup/shutdown hooks for database and Redis connection lifecycles.
 from fastapi import FastAPI
 
 from backend.api.routes.health import router as health_router
+from backend.api.supervisor import router as supervisor_router
 from backend.auth.router import router as auth_router
 from backend.config.settings import get_settings
 
@@ -22,6 +23,7 @@ app = FastAPI(
 
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(supervisor_router)
 
 
 @app.get("/")

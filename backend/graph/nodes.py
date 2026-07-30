@@ -23,6 +23,12 @@ from backend.graph.state import (
     WorkflowState,
     WorkflowStatus,
 )
+from backend.policy.rules import evaluate_policy
+
+# Placeholder confidence score used until execute_agent_node/classify_ticket_node
+# call a real model. TODO(OpenAI): replace with a score derived from the LLM's
+# own output (e.g. logprobs, a self-rated confidence field).
+_PLACEHOLDER_CONFIDENCE_SCORE = 1.0
 
 # Ordered (keyword, category) rules for classify_ticket_node. Order matters:
 # the first matching keyword wins, so more specific terms should precede
@@ -110,15 +116,23 @@ def execute_agent_node(state: WorkflowState) -> dict:
 
 
 def confidence_evaluation_node(state: WorkflowState) -> dict:
-    """Placeholder confidence gate: always confident, never needs review.
+    """Score the draft response and delegate the human-review decision to policy.
 
-    No scoring algorithm. Future work replaces these two constants with a
-    real confidence score and the policy evaluation
-    (`backend/policy/`) that derives `requires_human_review` from it.
+    The node itself holds no business rules: it supplies a placeholder
+    confidence score and the ticket text to `backend.policy.rules.evaluate_policy`,
+    which owns every keyword/threshold rule that decides `requires_human_review`.
+
+    TODO(OpenAI): replace `_PLACEHOLDER_CONFIDENCE_SCORE` with a real,
+    model-derived score.
     """
+    confidence_score = _PLACEHOLDER_CONFIDENCE_SCORE
+    evaluation = evaluate_policy(
+        ticket_text=state["ticket_text"],
+        confidence_score=confidence_score,
+    )
     return {
-        "confidence_score": 1.0,
-        "requires_human_review": False,
+        "confidence_score": confidence_score,
+        "requires_human_review": evaluation.requires_human_review,
     }
 
 
