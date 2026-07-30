@@ -12,9 +12,11 @@ backend, and backed by **PostgreSQL** (persistence) and **Redis** (caching /
 short-term memory).
 
 > Status: Sprint 4 scaffold. The LangGraph workflow orchestration backbone
-> (`backend/graph/`) is implemented with deterministic placeholder logic;
-> everything else is still `TODO` — see `TODO` markers throughout the
-> codebase and `docs/decisions.md` for what's pending.
+> (`backend/graph/`), escalation policy (`backend/policy/`), and the
+> supervisor approval-queue API (`backend/api/supervisor.py`) are implemented
+> with deterministic placeholder logic; everything else is still `TODO` —
+> see `TODO` markers throughout the codebase and `docs/decisions.md` for
+> what's pending.
 
 ## Tech Stack
 
@@ -30,27 +32,23 @@ short-term memory).
 - JWT / OAuth2 authentication
 - Pytest
 
+## Current Features
+
+- JWT/OAuth2 authentication
+- LangGraph workflow orchestration
+- CrewAI-ready agent architecture
+- Policy-based escalation engine
+- Supervisor approval workflow
+- Audit logging
+- PostgreSQL persistence layer
+- Dockerized development environment
+- Pytest test suite
+
 ## Authentication
 
-SupportOps AI uses **OAuth2 Password Flow** with **JWT (JSON Web Tokens)** for authentication and authorization.
-
-The authentication system includes:
-
-- OAuth2 Password authentication
-- JWT access token generation
-- Password hashing using bcrypt
-- Protected API endpoints
-- Current authenticated user endpoint (`GET /auth/me`)
-- Interactive testing through Swagger UI
-
-The screenshot below demonstrates:
-
-- Successful authentication via `POST /auth/login`
-- JWT access token issuance
-- Authenticated request to `GET /auth/me`
-- Retrieval of the currently authenticated user
-
-![Authentication Flow](docs/screenshots/01-authentication-flow.png)
+SupportOps AI secures API endpoints using OAuth2 Password Flow with JWT 
+authentication. Passwords are hashed with bcrypt, authenticated users are resolved
+ through FastAPI dependencies, and the flow can be exercised through Swagger UI.
 
 ## Workflow Orchestration
 
@@ -62,11 +60,22 @@ persistence to be dropped in without changing the topology.
 
 ![Compiled Workflow Graph](docs/screenshots/02-workflow.png)
 
-Running `python -m backend.scripts.run_workflow` against the sample ticket
-"I was billed twice for my subscription" routes it to the billing agent end
-to end:
+## Supervisor Approval Queue
 
-![LangGraph Smoke Test](docs/screenshots/03-langgraph-smoke-test.png)
+`confidence_evaluation_node` delegates human-review decisions to deterministic,
+keyword-based escalation rules in `backend/policy/rules.py` (refund, legal,
+lawsuit, attorney, security, breach, fraud, and low-confidence thresholds).
+Tickets flagged for review surface through a placeholder supervisor queue API
+(`backend/api/supervisor.py`):
+
+- `GET /supervisor/queue` — list tickets pending approval
+- `GET /supervisor/queue/{ticket_id}` — fetch a single queue entry
+- `POST /supervisor/{ticket_id}/approve` — approve a ticket's draft response
+- `POST /supervisor/{ticket_id}/reject` — reject a ticket's draft response
+
+Every handler returns deterministic placeholder data today — no database
+writes — with `TODO(Repository)` markers noting where `ApprovalRequestRepository`
+calls will replace them.
 
 ## Repository Layout
 
@@ -101,58 +110,49 @@ supportops-ai/
 │   ├── design_review.md
 │   ├── adr/
 │   │   └── ADR-001-langgraph-vs-crewai.md
+│   │
 │   └── screenshots/
 │       ├── 01-authentication-flow.png
 │       ├── 02-workflow.png
-│       └── 03-langgraph-smoke-test.png
+│       ├── 03-langgraph-smoke-test.png
+│       └── 04-supervisor-api-smoke-test.png
 │
 ├── backend/
-│   ├── __init__.py
 │   ├── main.py                   # FastAPI application entry point
 │   │
 │   ├── api/
-│   │   ├── __init__.py
 │   │   ├── README.md
+│   │   ├── supervisor.py          # GET/POST /supervisor/... — placeholder approval-queue API
 │   │   │
 │   │   ├── routes/               # APIRouter modules (e.g. health)
-│   │   │   ├── __init__.py
 │   │   │   └── health.py
 │   │   │
 │   │   ├── dependencies/         # FastAPI Depends providers (auth, db session, ...)
-│   │   │   └── __init__.py
 │   │   │
 │   │   └── middleware/           # ASGI middleware (logging, correlation IDs, ...)
-│   │       └── __init__.py
 │   │
 │   ├── agents/
-│   │   ├── __init__.py
 │   │   ├── README.md
 │   │   │
 │   │   ├── billing/               # Billing support agent
-│   │   │   └── __init__.py
 │   │   │
 │   │   ├── technical/             # Technical support agent
-│   │   │   └── __init__.py
 │   │   │
 │   │   ├── account/               # Account management agent
-│   │   │   └── __init__.py
 │   │   │
 │   │   └── general/               # General support agent
-│   │       └── __init__.py
 │   │
 │   ├── graph/                     # LangGraph workflow orchestration backbone
-│   │   ├── __init__.py
 │   │   ├── README.md
 │   │   ├── state.py               # WorkflowState + TicketCategory/SupportAgentType/WorkflowStatus enums
 │   │   ├── nodes.py                # load_ticket, classify_ticket, select_agent, execute_agent, confidence_evaluation, persist_results
 │   │   └── workflow.py             # build_workflow() / get_graph() — compiles the node graph
 │   │
 │   ├── policy/                   # Routing, escalation, and guardrail business rules
-│   │   ├── __init__.py
-│   │   └── README.md
+│   │   ├── README.md
+│   │   └── rules.py               # evaluate_policy() — keyword/threshold human-review escalation
 │   │
 │   ├── auth/                     # JWT/OAuth2 authentication & authorization
-│   │   ├── __init__.py
 │   │   ├── README.md
 │   │   ├── hashing.py             # Password hashing/verification (passlib/bcrypt)
 │   │   ├── jwt.py                 # Access-token issuance & verification (python-jose)
@@ -160,19 +160,16 @@ supportops-ai/
 │   │   └── router.py              # POST /auth/login, GET /auth/me
 │   │
 │   ├── core/                     # Framework-level infra shared across the API
-│   │   ├── __init__.py
 │   │   ├── README.md
 │   │   └── security.py            # OAuth2PasswordBearer scheme, 401/403 exceptions
 │   │
 │   ├── database/
-│   │   ├── __init__.py
 │   │   ├── README.md
 │   │   ├── base.py                # Declarative Base + UUID/timestamp mixins
 │   │   ├── session.py             # Async engine + session factory
 │   │   ├── enums.py               # UserRole, CustomerTier, TicketPriority/Status, ApprovalStatus
 │   │   │
 │   │   ├── models/                # SQLAlchemy declarative models
-│   │   │   ├── __init__.py
 │   │   │   ├── user.py
 │   │   │   ├── customer.py
 │   │   │   ├── ticket.py
@@ -184,28 +181,24 @@ supportops-ai/
 │   │   │   └── README.md
 │   │   │
 │   │   └── repositories/          # Repository-pattern data access
-│   │       └── __init__.py
 │   │
 │   ├── services/                 # Application services (routes depend on these)
-│   │   ├── __init__.py
-│   │   └── README.md
+│   │   ├── README.md
+│   │   └── audit.py               # log_audit_event() — placeholder audit-logging call site
 │   │
 │   ├── tools/                    # Tool implementations exposed to agents
-│   │   ├── __init__.py
 │   │   └── README.md
 │   │
 │   ├── schemas/                  # Pydantic request/response & internal contracts
-│   │   ├── __init__.py
 │   │   ├── README.md
-│   │   └── auth.py                # Token, AuthenticatedUser
+│   │   ├── auth.py                # Token, AuthenticatedUser
+│   │   └── supervisor.py          # SupervisorQueueItem/Response, ApprovalDecisionRequest/Response
 │   │
 │   ├── config/                   # Settings (env-driven configuration)
-│   │   ├── __init__.py
 │   │   ├── README.md
 │   │   └── settings.py
 │   │
 │   └── scripts/                  # One-off scripts (python -m backend.scripts.<name>)
-│       ├── __init__.py
 │       ├── README.md
 │       ├── seed.py                # Idempotent dev-data seed (users, customers, tickets)
 │       ├── run_workflow.py        # Runs the compiled LangGraph workflow against a sample ticket
@@ -218,7 +211,18 @@ supportops-ai/
 │   │
 │   ├── unit/                     # Fast, isolated tests (mirrors backend/)
 │   │   ├── README.md
-│   │   └── test_main.py
+│   │   ├── test_main.py
+│   │   ├── api/
+│   │   │   └── test_supervisor.py
+│   │   │
+│   │   ├── graph/
+│   │   │   └── test_nodes.py
+│   │   │
+│   │   ├── policy/
+│   │   │   └── test_rules.py
+│   │   │
+│   │   └── services/
+│   │       └── test_audit.py
 │   │
 │   ├── integration/              # Tests against real Postgres/Redis
 │   │   └── README.md
@@ -241,7 +245,6 @@ each subdirectory.
 
 - Python 3.12+
 - Docker & Docker Compose
-- [uv](https://github.com/astral-sh/uv) or `pip` for dependency management
 
 ### Local development
 
