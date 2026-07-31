@@ -1,17 +1,15 @@
-"""Placeholder audit-logging service.
+"""Audit-logging service: the one call site every action-recording caller uses.
 
-Marks the single place downstream code (currently `backend/api/supervisor.py`)
-calls to record a business/system action, without yet writing anywhere
-durable. Centralizing the call site here — rather than logging ad hoc from
-routes/nodes — means the eventual repository-backed implementation is a
-one-file change.
+Centralizing the call site here -- rather than logging/writing ad hoc from
+routes/nodes -- means callers (`backend/api/supervisor.py`,
+`backend.graph.nodes.persist_results_node`) never touch
+`AuditLogRepository` directly.
 
-No Postgres access. No repository implementation.
-
-TODO(Repository): replace the body of `log_audit_event` with a write via an
-`AuditLogRepository` (see `backend/database/repositories/`) against
-`backend.database.models.audit_log.AuditLog`, inside the same transaction as
-the action being recorded.
+Persistence is best-effort: a failed write (no reachable database, a bad
+`ticket_id`, ...) is logged as a warning, never raised, so a missing audit
+row never crashes the caller -- the structured log line below is always
+emitted regardless, so the event is never silently lost from observability
+even when Postgres is unavailable.
 """
 
 from __future__ import annotations
@@ -20,11 +18,13 @@ import uuid
 from typing import Any
 
 from backend.core.logging import get_logger
+from backend.database.repositories.audit_log import AuditLogRepository
+from backend.database.session import async_session_factory
 
 logger = get_logger(__name__)
 
 
-def log_audit_event(
+async def log_audit_event(
     *,
     ticket_id: uuid.UUID,
     event_type: str,
@@ -34,16 +34,12 @@ def log_audit_event(
 ) -> None:
     """Record a single audit event for `ticket_id`.
 
-    Placeholder: emits a structured log line in place of an `audit_logs`
-    row. Field names mirror `backend.database.models.audit_log.AuditLog`
-    (`ticket_id`, `user_id`, `event_type`, `description`, `event_metadata`)
-    so swapping in the real repository call is a drop-in replacement.
-
     Args:
         ticket_id: The ticket the event concerns.
         event_type: Short machine-readable event name (e.g. "supervisor_approved").
         description: Human-readable description of what happened.
-        user_id: The acting user, if any (None for system-generated events).
+        user_id: The acting user, if any (None for system-generated events,
+            e.g. "ai_draft_created").
         metadata: Additional structured context for the event.
     """
     logger.info(
@@ -59,3 +55,20 @@ def log_audit_event(
             "metadata": metadata or {},
         },
     )
+
+    try:
+        async with async_session_factory() as session:
+            repository = AuditLogRepository(session)
+            await repository.create(
+                ticket_id=ticket_id,
+                event_type=event_type,
+                description=description,
+                user_id=user_id,
+                metadata=metadata or {},
+            )
+            await session.commit()
+    except Exception as exc:
+        logger.warning(
+            "Failed to persist audit log row",
+            extra={"ticket_id": str(ticket_id), "event_type": event_type, "error": str(exc)},
+        )

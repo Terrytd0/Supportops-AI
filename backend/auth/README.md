@@ -12,6 +12,10 @@ than through `backend/api/dependencies/`.
   `require_role(*roles)`; look up the user via `backend/database/session.py`
   directly until a repository/service layer exists.
 - `router.py` — `POST /auth/login` (OAuth2 password grant) and `GET /auth/me`.
+- `rate_limit_key.py` — `resolve_rate_limit_key`, registered with
+  `backend.core.rate_limit` at startup (`register_key_resolver`) so rate
+  limiting can key by authenticated user rather than just IP, without
+  `backend/core/` importing this package's JWT logic directly.
 
 See also `backend/core/security.py` for the shared `OAuth2PasswordBearer`
 scheme and the `401`/`403` exceptions this package raises.

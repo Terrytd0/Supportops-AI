@@ -15,6 +15,5 @@ Application configuration, sourced from environment variables.
 ## TODO
 
 - [ ] Add per-environment settings classes or profiles (local/dev/staging/prod)
-- [ ] Add LLM provider configuration (API keys, model names, timeouts)
-- [ ] Add agent/graph tuning parameters (max turns, timeouts, retry policy)
+- [ ] Add agent/graph tuning parameters (max turns, retry policy)
 - [ ] Wire secrets management (e.g., cloud secrets manager) for non-local environments

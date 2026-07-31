@@ -1,8 +1,10 @@
 """LangGraph state graph package: wires agents together into a control flow.
 
 - `state.py` — the typed `WorkflowState` threaded through every node.
-- `nodes.py` — one function per workflow stage, each a deterministic
-  placeholder standing in for future OpenAI/CrewAI/Postgres/Redis logic.
+- `nodes.py` — one function per workflow stage. Most remain deterministic
+  placeholders; `execute_agent_node` calls a real CrewAI specialist agent
+  (`backend/agents/`) for OpenAI generation and a Postgres knowledge-base
+  lookup.
 - `workflow.py` — assembles the nodes into the compiled graph
   (`build_workflow()` / `get_graph()`).
 

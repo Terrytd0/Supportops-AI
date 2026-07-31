@@ -1,28 +1,33 @@
 """Concurrency load test: 50 simultaneous ticket-decision requests.
 
 Usage:
-    # In one terminal, run the app (see README.md):
+    # 1. Run the app against a real, seeded database (see README.md):
+    python -m backend.scripts.seed
     uvicorn backend.main:app
 
-    # In another:
+    # 2. In another terminal:
     python -m backend.scripts.load_test
 
-Scope note (Sprint 4 Day 5 Task 4): there is no ticket-*creation* endpoint
-yet -- no `POST /tickets` router exists under `backend/api/routes/`, and
-adding one is out of scope here (application business logic is untouched).
-The nearest workflow-related POST endpoints that do exist are the
-supervisor approve/reject decisions in `backend/api/supervisor.py`, so this
-measures the concurrency characteristics of the current HTTP API (routing,
-rate limiting, the placeholder queue lookup) via
-`POST /supervisor/{ticket_id}/reject`, not the future ticket-ingestion
-workflow.
+`POST /tickets` (`backend/api/routes/tickets.py`) exists now, but this
+script deliberately still targets the supervisor reject decision
+(`POST /supervisor/queue/{ticket_id}/reject`) rather than ticket creation:
+ticket creation makes real OpenAI/CrewAI calls per request, so its
+concurrency profile is dominated by external LLM latency, not this app's
+own routing/auth/rate-limiting performance -- what this script measures.
+
+The reject endpoint requires a Supervisor/Admin bearer token, so this script
+first logs in (`POST /auth/login`) as the supervisor `backend.scripts.seed`
+creates (`supervisor@supportops.ai`), then reuses that token for every
+concurrent request -- exercising the same code path a real client would,
+not a bypassed one.
 
 All 50 requests target that single endpoint, so the run also naturally
-exercises the 30/minute/IP rate limit configured in
-`backend/api/supervisor.py` (Sprint 4 Day 5 Task 3): the first 30 succeed
-and the rest are throttled with 429s. Those 429s are expected, correct
-behavior under load -- not failures -- and are reported in their own
-bucket below rather than bypassing the limiter to avoid them.
+exercises the 30/minute rate limit configured in
+`backend/api/supervisor.py` (now keyed by the authenticated user, not IP --
+see `backend/auth/rate_limit_key.py`): the first 30 succeed and the rest
+are throttled with 429s. Those 429s are expected, correct behavior under
+load -- not failures -- and are reported in their own bucket below rather
+than bypassing the limiter to avoid them.
 
 Uses only asyncio + httpx.AsyncClient (already a project dependency); no
 dedicated load-testing framework.
@@ -34,6 +39,7 @@ import asyncio
 import itertools
 import logging
 import os
+import sys
 import time
 from dataclasses import dataclass
 
@@ -48,11 +54,16 @@ logger = get_logger(__name__)
 # changes; defaults to `uvicorn backend.main:app`'s default bind address.
 _BASE_URL = os.environ.get("LOAD_TEST_BASE_URL", "http://127.0.0.1:8000")
 
-# Matches the single entry in `backend.api.supervisor._PLACEHOLDER_QUEUE`
-# (the same placeholder ID `tests/unit/api/test_supervisor.py` uses) -- the
-# only ticket ID the placeholder queue currently recognizes.
+# The supervisor `backend.scripts.seed` creates -- see that module's `_USERS`.
+_SUPERVISOR_EMAIL = "supervisor@supportops.ai"
+_SUPERVISOR_PASSWORD = "SupervisorPass123!"
+
+# A placeholder ID: `backend.scripts.seed` creates no `ApprovalRequest` rows
+# (see its module docstring), so this resolves to a real pending review only
+# if one has been created since (e.g. via `POST /tickets` with text
+# mentioning "refund"/"attorney"/etc.) -- see `_submit_ticket`'s docstring.
 _KNOWN_TICKET_ID = "00000000-0000-0000-0000-000000000001"
-_ENDPOINT_PATH = f"/supervisor/{_KNOWN_TICKET_ID}/reject"
+_ENDPOINT_PATH = f"/supervisor/queue/{_KNOWN_TICKET_ID}/reject"
 
 _CONCURRENT_REQUESTS = 50
 _REQUEST_TIMEOUT_SECONDS = 10.0
@@ -79,15 +90,54 @@ class _RequestOutcome:
         return not (self.is_successful or self.is_rate_limited)
 
 
+async def _login() -> str:
+    """Authenticate as the seeded supervisor and return a bearer token.
+
+    A real login, not a minted-out-of-band token: this exercises the same
+    `POST /auth/login` a real client would use, against whatever database
+    the running app is actually configured for.
+    """
+    async with httpx.AsyncClient(base_url=_BASE_URL) as client:
+        response = await client.post(
+            "/auth/login",
+            data={"username": _SUPERVISOR_EMAIL, "password": _SUPERVISOR_PASSWORD},
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+        )
+    if response.status_code != 200:
+        logger.error(
+            "Login failed (%d): %s. Has `python -m backend.scripts.seed` been run "
+            "against this app's database?",
+            response.status_code,
+            response.text,
+        )
+        sys.exit(1)
+    return str(response.json()["access_token"])
+
+
 async def _submit_ticket(
-    client: httpx.AsyncClient, ticket: LoadTestTicket, request_number: int
+    client: httpx.AsyncClient,
+    ticket: LoadTestTicket,
+    request_number: int,
+    auth_headers: dict[str, str],
 ) -> _RequestOutcome:
-    """POST one ticket decision; never raises so a bad request can't stop the batch."""
+    """POST one ticket decision; never raises so a bad request can't stop the batch.
+
+    A 404 here is an expected outcome, not a bug: `backend.scripts.seed`
+    intentionally creates no `ApprovalRequest` rows (see its module
+    docstring), so `_KNOWN_TICKET_ID` won't resolve unless a ticket has
+    actually been escalated since (e.g. `POST /tickets` with text
+    mentioning "refund" or "attorney"). This script still measures real
+    routing/auth/rate-limiting either way -- the limiter runs before the
+    route body does.
+    """
     comment = f"[{ticket['title']}] {ticket['description']} (request #{request_number})"
     start = time.perf_counter()
     try:
         response = await client.post(
-            _ENDPOINT_PATH, json={"comments": comment}, timeout=_REQUEST_TIMEOUT_SECONDS
+            _ENDPOINT_PATH,
+            json={"comments": comment},
+            headers=auth_headers,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
         )
     except httpx.HTTPError as exc:
         logger.warning("Request #%d failed: %s", request_number, exc)
@@ -107,10 +157,13 @@ def _ticket_batch(count: int) -> list[LoadTestTicket]:
 
 
 async def _run_load_test() -> list[_RequestOutcome]:
+    token = await _login()
+    auth_headers = {"Authorization": f"Bearer {token}"}
+
     tickets = _ticket_batch(_CONCURRENT_REQUESTS)
     async with httpx.AsyncClient(base_url=_BASE_URL) as client:
         tasks = [
-            _submit_ticket(client, ticket, request_number)
+            _submit_ticket(client, ticket, request_number, auth_headers)
             for request_number, ticket in enumerate(tickets, start=1)
         ]
         return await asyncio.gather(*tasks)

@@ -14,7 +14,7 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
     networks:
@@ -48,6 +48,11 @@ services:
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - supportops-network
 
@@ -63,9 +68,24 @@ services:
     networks:
       - supportops-network
 
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: supportops-ai-redisinsight
+    ports:
+      - "5540:5540"
+    volumes:
+      - redisinsight_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - supportops-network
+
 volumes:
   postgres_data:
   redis_data:
+  redisinsight_data:
 
 networks:
   supportops-network:

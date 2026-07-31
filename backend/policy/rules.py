@@ -1,17 +1,17 @@
-"""Deterministic placeholder policy evaluation for human-review escalation.
+"""Deterministic policy evaluation for human-review escalation.
 
 `evaluate_policy` is the single function `backend/graph/nodes.py::
 confidence_evaluation_node` delegates to, so the node stays a thin adapter
 and this module stays the one place business rules for human review live
 (per CLAUDE.md: "Keep agent, graph, and policy concerns separate ... policy
-defines business rules").
+defines business rules"). It remains deterministic and model-free itself:
+every rule is a plain keyword match, a regex over dollar figures, a
+threshold comparison, or -- for `agent_unresolved` -- a boolean already
+decided upstream. No rule here calls a model or a repository directly;
+`agent_unresolved` is how a CrewAI agent's own (OpenAI-informed) judgment
+reaches this function, as a reported signal rather than a decision agents
+make for themselves.
 
-Every rule here is a plain keyword match (or, for the refund-amount check, a
-regex over dollar figures) against the ticket text — no model call, no
-repository lookup.
-
-TODO(OpenAI): replace/augment keyword matching with an OpenAI-based
-moderation or intent-classification pass once that integration exists.
 TODO(Repository): source per-tenant policy thresholds (e.g. the refund
 amount threshold) from a repository/config table instead of the module
 constants below.
@@ -93,19 +93,31 @@ def _build_reason(matched_rules: list[str]) -> str:
     return f"Escalation rules matched: {', '.join(matched_rules)}."
 
 
-def evaluate_policy(ticket_text: str, confidence_score: float) -> PolicyEvaluation:
+def evaluate_policy(
+    ticket_text: str,
+    confidence_score: float,
+    agent_unresolved: bool = False,
+) -> PolicyEvaluation:
     """Determine whether a ticket requires human/supervisor review.
 
-    Placeholder business rules, all keyword- or threshold-based:
+    Placeholder business rules, all keyword-, threshold-, or signal-based:
     - Escalation keywords: legal, lawsuit, attorney, security, breach, fraud.
     - Refund mentions (always), flagged additionally as
       "refund_over_threshold" when a dollar amount over
       `_REFUND_AMOUNT_THRESHOLD_USD` is present.
     - Confidence below `_LOW_CONFIDENCE_THRESHOLD`.
+    - `agent_unresolved` (see below).
 
     Args:
         ticket_text: Raw ticket text, as stored on `WorkflowState.ticket_text`.
         confidence_score: The workflow's current confidence score (0.0-1.0).
+        agent_unresolved: The specialist agent's own structured "I couldn't
+            confidently resolve this" signal (`AgentResult.unresolved`, set
+            on a CrewAI/OpenAI failure or the agent's own judgment -- see
+            `backend.agents.base.SpecialistAgent`). This is this function's
+            entire contract with the agent layer: agents report an outcome,
+            this function is the only place that turns it into an escalation
+            decision.
 
     Returns:
         A `PolicyEvaluation` with `requires_human_review` set if any rule matched.
@@ -114,6 +126,9 @@ def evaluate_policy(ticket_text: str, confidence_score: float) -> PolicyEvaluati
 
     if confidence_score < _LOW_CONFIDENCE_THRESHOLD:
         matched_rules.append("low_confidence")
+
+    if agent_unresolved:
+        matched_rules.append("agent_unresolved")
 
     return PolicyEvaluation(
         requires_human_review=bool(matched_rules),

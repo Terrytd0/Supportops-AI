@@ -1,20 +1,23 @@
 """FastAPI application entry point.
 
-TODO: register additional routers as they are implemented (tickets,
-conversations, agent runs), mount middleware (backend/api/middleware), and
-add startup/shutdown hooks for database and Redis connection lifecycles.
+TODO: register additional routers as they are implemented (conversations,
+agent runs), mount middleware (backend/api/middleware), and add
+startup/shutdown hooks for database and Redis connection lifecycles.
 """
 
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 
+from backend.api.routes.customers import router as customers_router
 from backend.api.routes.health import router as health_router
+from backend.api.routes.tickets import router as tickets_router
 from backend.api.supervisor import router as supervisor_router
+from backend.auth.rate_limit_key import resolve_rate_limit_key
 from backend.auth.router import router as auth_router
 from backend.config.settings import get_settings
 from backend.core.logging import configure_logging, get_logger
-from backend.core.rate_limit import configure_rate_limiting
+from backend.core.rate_limit import configure_rate_limiting, register_key_resolver
 
 # Configured once, here, at application startup -- every other module just
 # calls get_logger(__name__) and shares this handler/formatter.
@@ -32,11 +35,14 @@ app = FastAPI(
     debug=settings.debug,
 )
 
+register_key_resolver(resolve_rate_limit_key)
 configure_rate_limiting(app)
 
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(supervisor_router)
+app.include_router(tickets_router)
+app.include_router(customers_router)
 
 
 @app.middleware("http")

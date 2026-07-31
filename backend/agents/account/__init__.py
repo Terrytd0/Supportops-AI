@@ -1,4 +1,5 @@
-"""Account management support agent.
+"""Account management support agent."""
 
-TODO: implement the account agent (CrewAI role/task definition, tools, prompts).
-"""
+from backend.agents.account.agent import AccountAgent
+
+__all__ = ["AccountAgent"]

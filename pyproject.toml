@@ -66,11 +66,17 @@ dev = [
     "ruff>=0.6.0",
     "mypy>=1.11.0",
     "pre-commit>=3.8.0",
+    # In-memory redis.asyncio-compatible server for tests -- no real Redis
+    # is required to exercise rate limiting, idempotency, checkpoints, or caching.
+    "fakeredis>=2.20.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "integration: exercises a real Postgres/Redis dependency (see tests/integration/README.md); skips itself if unreachable rather than failing a plain `pytest` run.",
+]
 
 [tool.ruff]
 line-length = 100
@@ -87,6 +93,10 @@ ignore = [
 python_version = "3.13"
 ignore_missing_imports = true
 disallow_untyped_defs = false
+# tests/ has no __init__.py files (pytest doesn't need them) and now has two
+# files named conftest.py (tests/conftest.py, tests/unit/api/conftest.py);
+# without this, mypy treats both as the same top-level module and errors.
+explicit_package_bases = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend"]

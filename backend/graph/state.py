@@ -56,6 +56,7 @@ class WorkflowStatus(str, enum.Enum):
 
 class WorkflowState(TypedDict):
     """State threaded through every node of the support workflow graph."""
+
     ticket_id: UUID
     customer_id: UUID
     ticket_text: str
@@ -64,6 +65,8 @@ class WorkflowState(TypedDict):
     selected_agent: NotRequired[SupportAgentType]
     retrieved_context: NotRequired[str]
     draft_response: NotRequired[str]
+    agent_unresolved: NotRequired[bool]
     confidence_score: NotRequired[float]
     requires_human_review: NotRequired[bool]
+    matched_policy_rules: NotRequired[tuple[str, ...]]
     workflow_status: NotRequired[WorkflowStatus]

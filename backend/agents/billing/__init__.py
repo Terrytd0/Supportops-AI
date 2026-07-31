@@ -1,4 +1,5 @@
-"""Billing support agent.
+"""Billing support agent."""
 
-TODO: implement the billing agent (CrewAI role/task definition, tools, prompts).
-"""
+from backend.agents.billing.agent import BillingAgent
+
+__all__ = ["BillingAgent"]
