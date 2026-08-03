@@ -63,3 +63,10 @@ modules contain structure and `TODO` markers only — no business logic.
 - Keep agent, graph, and policy concerns separate: agents define *capability*,
   the graph defines *control flow*, policy defines *business rules*.
 - Do not remove `TODO` markers without implementing the corresponding logic.
+
+## Attribution
+
+Commits authored with Claude Code assistance carry a `Co-Authored-By: Claude
+Sonnet 5 <noreply@anthropic.com>` trailer, so AI-assisted work is
+attributed transparently in the commit history rather than folded silently
+into the primary author.
