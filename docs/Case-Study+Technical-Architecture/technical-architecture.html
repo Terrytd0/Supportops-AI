@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SupportOps AI — Technical Architecture</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="doc">
+
+  <div class="cover-block">
+    <p class="cover-kicker">Technical Architecture Document</p>
+    <h1 class="cover-title">SupportOps AI<br>Technical Architecture</h1>
+    <p class="cover-subtitle">An enterprise-style multi-agent customer support platform — LangGraph workflow orchestration around CrewAI specialist agents, with a deterministic policy engine gating every risky action.</p>
+
+    <div class="meta-table">
+      <span class="meta-label">Project Type</span><span class="meta-value">Self-directed portfolio project. Not a production deployment — no real company or customer data behind it.</span>
+      <span class="meta-label">Document</span><span class="meta-value">Technical Architecture Reference</span>
+      <span class="meta-label">Primary Source</span><span class="meta-value"><code>docs/architecture.md</code></span>
+      <span class="meta-label">Prepared</span><span class="meta-value">2026</span>
+      <span class="meta-label">Test Suite</span><span class="meta-value">167 automated tests passing (<code>pytest</code>)</span>
+    </div>
+
+    <div class="badge-row">
+      <span class="badge">Python 3.12</span>
+      <span class="badge">FastAPI</span>
+      <span class="badge alt2">LangGraph</span>
+      <span class="badge alt">CrewAI</span>
+      <span class="badge">PostgreSQL</span>
+      <span class="badge alt2">167 Tests Passing</span>
+    </div>
+
+    <div class="callout">
+      <strong>How to read this document:</strong> every capability described here is marked either <em>Implemented</em>, <em>Partially implemented</em>, or <em>Design only</em>. The codebase itself names its remaining gaps as <code>TODO</code> markers rather than half-building them silently — this document surfaces the ones that matter architecturally rather than hiding behind "mostly done."
+    </div>
+  </div>
+
+  <section class="section">
+    <p class="section-num">Section 1</p>
+    <h2 class="section-title">System Architecture</h2>
+    <p>SupportOps AI orchestrates four specialist AI agents (billing, technical, account, general) behind a FastAPI backend to triage and draft responses to customer support tickets. LangGraph owns the workflow's control flow — state, classification, routing, escalation — while CrewAI supplies the specialist agents it calls into for domain reasoning. A deterministic policy engine, not the model, decides whether a ticket needs human approval before anything reaches a customer.</p>
+    <p>PostgreSQL is the system of record for all business data. Redis is ephemeral infrastructure only — rate limiting, idempotency, workflow checkpoints, and AI/knowledge-base caching — chosen so a Redis outage can never lose business data (see Section 2's Redis callout).</p>
+
+    <h3>Pipeline Overview</h3>
+    <div class="flow-block tint-blue">
+      <div class="flow-block-head"><strong>load_ticket</strong><span>backend/graph/nodes.py</span></div>
+      <ul><li>Initializes <code>WorkflowState</code> from the incoming ticket request</li></ul>
+    </div>
+    <p class="flow-arrow-down">▼</p>
+    <div class="flow-block tint-gray">
+      <div class="flow-block-head"><strong>classify_ticket</strong><span>backend/graph/classifier.py</span></div>
+      <ul><li>OpenAI structured-output classification, Redis-cached</li></ul>
+    </div>
+    <p class="flow-arrow-down">▼</p>
+    <div class="flow-block tint-gray">
+      <div class="flow-block-head"><strong>select_agent</strong><span>backend/graph/nodes.py</span></div>
+      <ul><li>Deterministic mapping from ticket category to specialist type</li></ul>
+    </div>
+    <p class="flow-arrow-down">▼</p>
+    <div class="flow-block tint-purple">
+      <div class="flow-block-head"><strong>execute_agent</strong><span>backend/agents/</span></div>
+      <ul><li>Runs the selected CrewAI specialist, grounded via a Postgres knowledge-base tool (Redis-cached)</li></ul>
+    </div>
+    <p class="flow-arrow-down">▼</p>
+    <div class="flow-block tint-orange">
+      <div class="flow-block-head"><strong>confidence_evaluation</strong><span>backend/policy/rules.py</span></div>
+      <ul><li>Deterministic keyword/threshold policy + the agent's own <code>agent_unresolved</code> signal decide escalation</li></ul>
+    </div>
+    <p class="flow-arrow-down">▼</p>
+    <div class="flow-block tint-green">
+      <div class="flow-block-head"><strong>persist_results</strong><span>backend/services/</span></div>
+      <ul><li>Writes the ticket outcome to Postgres; enqueues a real <code>ApprovalRequest</code> row if flagged</li></ul>
+    </div>
+    <p style="font-size:11.8px;font-style:italic;color:var(--muted);margin-top:8px;">Four of these six nodes also save a best-effort Redis checkpoint after running — diagnostics/recovery only, never required for correctness.</p>
+
+    <h3>Compiled Workflow Graph</h3>
+    <p>The topology above is a real, compiled LangGraph graph, exported via <code>backend.scripts.export_workflow</code>. It has stayed structurally fixed even as every node's implementation moved from placeholder to real — a deliberate separation between the workflow's shape and its node internals.</p>
+    <figure>
+      <img src="assets/02-workflow.png" alt="Compiled LangGraph workflow graph">
+      <figcaption style="font-size:11.6px;color:var(--muted);font-style:italic;margin-top:6px;">Fig. 1 — The compiled six-node LangGraph workflow.</figcaption>
+    </figure>
+  </section>
+
+  <section class="section">
+    <p class="section-num">Section 2</p>
+    <h2 class="section-title">Component Responsibilities</h2>
+    <p>The table below states, for each capability, exactly what it owns and its current implementation status — distinguishing real, Postgres/Redis-backed logic from what remains a documented gap.</p>
+    <p style="font-size:12px;"><span class="status-pill done">IMPLEMENTED</span> in production code &nbsp; <span class="status-pill partial">PARTIAL</span> implemented in part &nbsp; <span class="status-pill not-built">NOT BUILT</span> not yet built</p>
+    <table>
+      <thead><tr><th>Capability</th><th>Owns</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>JWT / OAuth2 authentication</td><td><code>backend/auth/</code> — password hashing, token issuance/verification, role dependencies</td><td><span class="status-pill done">DONE</span></td></tr>
+        <tr><td>LangGraph workflow orchestration</td><td><code>backend/graph/</code> — fixed 6-node graph, state, checkpointing</td><td><span class="status-pill done">DONE</span></td></tr>
+        <tr><td>CrewAI specialist agents</td><td><code>backend/agents/</code> — billing, technical, account, general, grounded via KB tool</td><td><span class="status-pill done">DONE</span></td></tr>
+        <tr><td>OpenAI ticket classification</td><td><code>backend/graph/classifier.py</code> — structured outputs, Redis-cached</td><td><span class="status-pill done">DONE</span></td></tr>
+        <tr><td>Policy / escalation engine</td><td><code>backend/policy/rules.py</code> — deterministic keyword/threshold rules</td><td><span class="status-pill done">DONE</span></td></tr>
+        <tr><td>Supervisor approval queue</td><td><code>backend/api/supervisor.py</code> — real Postgres-backed view/approve/edit/reject</td><td><span class="status-pill done">DONE</span></td></tr>
+        <tr><td>Idempotent ticket creation</td><td><code>backend/services/idempotency.py</code> — atomic Redis claim, fails closed</td><td><span class="status-pill done">DONE</span></td></tr>
+        <tr><td>Distributed rate limiting</td><td><code>backend/core/rate_limit.py</code> — Redis-backed, in-memory fallback</td><td><span class="status-pill done">DONE</span></td></tr>
+        <tr><td>Audit logging</td><td><code>backend/services/audit.py</code> — real Postgres <code>audit_logs</code> rows</td><td><span class="status-pill done">DONE</span></td></tr>
+        <tr><td>Postgres persistence + migrations</td><td><code>backend/database/</code> — repository pattern, Alembic migration per table</td><td><span class="status-pill done">DONE</span></td></tr>
+        <tr><td>Confidence scoring</td><td><code>backend/graph/nodes.py</code> — currently <code>_PLACEHOLDER_CONFIDENCE_SCORE</code>, a fixed value, not model-derived</td><td><span class="status-pill not-built">NOT BUILT</span></td></tr>
+        <tr><td>Per-tenant policy thresholds</td><td><code>backend/policy/rules.py</code> — thresholds are global today, not per-tenant</td><td><span class="status-pill not-built">NOT BUILT</span></td></tr>
+        <tr><td>Correlation-ID / centralized error middleware</td><td><code>backend/api/middleware/</code> — package exists, not implemented</td><td><span class="status-pill not-built">NOT BUILT</span></td></tr>
+        <tr><td>Additional agent tools (billing system, ticketing/CRM lookups)</td><td><code>backend/tools/</code> — only the knowledge-base tool exists today</td><td><span class="status-pill partial">PARTIAL</span></td></tr>
+        <tr><td>Structured (JSON) logging</td><td><code>backend/core/logging.py</code> — plain formatter today; log level not yet sourced from settings</td><td><span class="status-pill partial">PARTIAL</span></td></tr>
+        <tr><td>Dedicated <code>TicketRepository</code></td><td><code>backend/database/repositories/</code> — ticket persistence currently lives in the service layer, not a repository</td><td><span class="status-pill not-built">NOT BUILT</span></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout warn">
+      <strong>Confidence scoring is a fixed placeholder.</strong> <code>confidence_evaluation_node</code> currently reads a constant, <code>_PLACEHOLDER_CONFIDENCE_SCORE</code>, rather than a real score derived from the model's own output. Escalation itself is still deterministic and correct — it runs on the policy engine's keyword/threshold rules and the agent's explicit <code>agent_unresolved</code> signal, neither of which depend on this placeholder — but "how confident was the agent" is not yet a real, trustworthy number. Named honestly in the code (the constant's name says what it is) rather than presented as calibrated.
+    </div>
+
+    <h3>Module Ownership Boundaries</h3>
+    <div class="col-2">
+      <ul>
+        <li><code>backend/graph/</code> — workflow control flow, state, checkpointing</li>
+        <li><code>backend/agents/</code> — CrewAI specialist reasoning; no workflow control</li>
+        <li><code>backend/policy/</code> — escalation/routing rules; the only place that decides human review</li>
+        <li><code>backend/api/</code> — HTTP orchestration only</li>
+      </ul>
+      <ul>
+        <li><code>backend/database/</code> — SQLAlchemy models + repository-pattern data access</li>
+        <li><code>backend/core/</code> — framework-level infra: Redis client, rate limiting, security, cache</li>
+        <li><code>backend/services/</code> — application services routes depend on (idempotency, audit, ticket)</li>
+        <li><code>backend/tools/</code> — tool implementations exposed to CrewAI agents</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <p class="section-num">Section 3</p>
+    <h2 class="section-title">Data Flow</h2>
+    <p>End-to-end, a single ticket submission moves through the system as follows:</p>
+    <ol>
+      <li>A client calls <code>POST /tickets</code> with an <code>Idempotency-Key</code> header; a repeated key replays the original response instead of re-running the workflow.</li>
+      <li><code>customer_id</code> is validated against Postgres before insert, returning a clean 404 (not a raw foreign-key violation) for an unknown one.</li>
+      <li>The LangGraph workflow runs: <code>load_ticket → classify_ticket → select_agent → execute_agent → confidence_evaluation → persist_results</code>.</li>
+      <li><code>classify_ticket</code> calls OpenAI for structured-output classification (Redis-cached by ticket text).</li>
+      <li><code>execute_agent</code> runs the matched CrewAI specialist, grounded by a Postgres knowledge-base lookup tool (also Redis-cached).</li>
+      <li><code>confidence_evaluation</code> runs the ticket through <code>policy/rules.py</code>'s deterministic rules plus the agent's <code>agent_unresolved</code> signal.</li>
+      <li><code>persist_results</code> writes the outcome to Postgres, and — if the policy flagged it — enqueues a real <code>ApprovalRequest</code> row for a Supervisor/Admin to review.</li>
+      <li>Every view/approve/edit/reject action on a flagged ticket writes its own <code>audit_logs</code> row.</li>
+    </ol>
+
+    <h3>Request/Response Shape</h3>
+    <p class="mono" style="display:block;padding:12px 16px;">POST /tickets → LangGraph → classify_ticket → execute_agent (CrewAI) → confidence_evaluation → persist_results → JSON Response</p>
+
+    <h3>Supervisor Review Routes</h3>
+    <ul>
+      <li><code>GET /supervisor/queue</code> — list tickets pending approval</li>
+      <li><code>GET /supervisor/queue/{ticket_id}</code> — fetch a single queue entry</li>
+      <li><code>POST /supervisor/queue/{ticket_id}/approve</code> · <code>/edit</code> · <code>/reject</code> — act on a ticket's draft response, each writing an audit row</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <p class="section-num">Section 4</p>
+    <h2 class="section-title">Technology Choices</h2>
+    <table>
+      <thead><tr><th>Component</th><th>Technology</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Backend API</td><td>FastAPI</td><td>Async-first, typed, built-in OpenAPI docs for the ticket/supervisor contracts</td></tr>
+        <tr><td>Workflow orchestration</td><td>LangGraph</td><td>Graph-based control flow with first-class state persistence, conditional routing, and human-in-the-loop interrupts</td></tr>
+        <tr><td>Specialist reasoning</td><td>CrewAI</td><td>Role/task abstraction for domain agents without hand-rolling their reasoning loop</td></tr>
+        <tr><td>System of record</td><td>PostgreSQL</td><td>Durable storage for tickets, approvals, audit logs — never at risk from a Redis outage</td></tr>
+        <tr><td>Ephemeral infra</td><td>Redis</td><td>Rate limiting, idempotency, checkpoints, caching — everything safe to lose and rebuild</td></tr>
+        <tr><td>Auth</td><td>JWT / OAuth2</td><td>Stateless, standard, works cleanly with FastAPI's <code>Depends</code> system</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Why LangGraph <em>and</em> CrewAI (ADR-001)</h3>
+    <p>LangGraph owns deterministic workflow control — ticket state, classification routing, policy evaluation, human-in-the-loop escalation, persistence. CrewAI implements the Billing, Technical, Account, and General agents that generate domain-specific responses, but never control workflow execution or escalation. The explicit trade-off: two frameworks means more integration surface and cross-component debugging, accepted in exchange for a hard boundary between "AI reasons" and "system decides" that a single framework couldn't enforce as cleanly. Alternatives considered and rejected: LangGraph-only (would mean hand-rolling role-based agents, losing modularity) and CrewAI-only (would make deterministic routing, state persistence, and human approval checkpoints harder to implement consistently). Full write-up: <code>docs/adr/ADR-001-langgraph-vs-crewai.md</code>.</p>
+
+    <h3>Why Postgres as the only system of record</h3>
+    <p>Every feature built on Redis — rate limiting, idempotency, checkpoints, caching — is explicitly ephemeral: a miss recomputes, an outage degrades rather than corrupts. The one deliberate exception is idempotency, which fails <em>closed</em> (a 503 rather than risking a duplicate ticket) because "no duplicate tickets" is a correctness requirement, not a performance concern. This split is what lets the platform honestly claim that a Redis outage never puts business data at risk.</p>
+  </section>
+
+  <section class="section">
+    <p class="section-num">Section 5</p>
+    <h2 class="section-title">Error Handling &amp; Resilience</h2>
+    <h3>Cross-Event-Loop Client Isolation</h3>
+    <p>The app legitimately runs two long-lived event loops: FastAPI's own request-handling loop, and a dedicated background loop <code>backend.core.asyncio_utils.run_sync</code> uses to bridge LangGraph's synchronous node functions back into async Redis/Postgres calls. Both <code>redis.asyncio.Redis</code> and SQLAlchemy's async engine hold connections bound to whichever loop first uses them. Sharing one client across both loops used to crash with a <code>RuntimeError</code> — for Postgres, it could poison a pooled connection so a later, unrelated request drawing that same connection would 500, which made the bug look intermittent and unrelated to its real trigger. Fixed by handing out one client/engine per calling loop (<code>get_redis_client()</code>, <code>async_session_factory()</code>), with real-Redis/real-Postgres regression tests (<code>tests/integration/test_ticket_workflow.py</code>, <code>test_idempotency_cross_loop.py</code>).</p>
+
+    <h3>Degradation Policy, Chosen Per Feature</h3>
+    <table>
+      <thead><tr><th>Feature</th><th>On Redis failure</th><th>Rationale</th></tr></thead>
+      <tbody>
+        <tr><td>AI classification / KB cache</td><td>Fails open — recomputes</td><td>A cache miss is just slower, never wrong</td></tr>
+        <tr><td>Workflow checkpoints</td><td>Fails open — no checkpoint saved</td><td>Diagnostics/recovery only, never required for correctness</td></tr>
+        <tr><td>Rate limiting</td><td>Fails open, to a looser fallback ceiling</td><td>Availability preferred over precise per-route limits during an outage</td></tr>
+        <tr><td>Idempotency</td><td>Fails <strong>closed</strong> — 503</td><td>Silently proceeding could let a genuine duplicate ticket through</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Design principle:</strong> a specialist agent can report it's unresolved, but it never decides escalation. That decision belongs entirely to the deterministic policy engine — a hard boundary between AI reasoning and system control, not just a convention.
+    </div>
+  </section>
+
+  <section class="section">
+    <p class="section-num">Section 6</p>
+    <h2 class="section-title">Testing Approach</h2>
+    <p>167 tests total: 159 unit tests with Redis mocked via <code>fakeredis</code> and Postgres via test doubles, plus 8 integration tests against a real Redis and/or Postgres that skip themselves — rather than fail — when the service they need isn't reachable, so a plain <code>pytest</code> run is always safe regardless of what's running locally.</p>
+    <p class="mono" style="display:block;padding:10px 16px;text-align:center;"><code style="background:none;color:var(--accent-deep);font-weight:700;">pytest</code> → <strong>167 passed</strong></p>
+    <table>
+      <thead><tr><th>Area</th><th>What's verified</th></tr></thead>
+      <tbody>
+        <tr><td>Graph nodes</td><td>classify_ticket, execute_agent, persist_results, checkpoint save/read behavior</td></tr>
+        <tr><td>Policy engine</td><td>Escalation rules, adversarial input handling</td></tr>
+        <tr><td>Supervisor API</td><td>Queue listing, approve/edit/reject flows, adversarial cases</td></tr>
+        <tr><td>Services</td><td>Idempotency store (atomic claim, fail-closed), audit logging, ticket creation + execution</td></tr>
+        <tr><td>Core infra</td><td>Rate limiting (Redis + fallback), caching, asyncio bridge, Redis client lifecycle</td></tr>
+        <tr><td>Auth</td><td>JWT issuance/verification, rate-limit key resolution</td></tr>
+        <tr><td>Integration</td><td>Real ticket workflow against live Redis/Postgres, cross-loop client isolation, live schema vs. model drift (<code>alembic check</code>)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <p class="section-num">Section 7</p>
+    <h2 class="section-title">Known Gaps &amp; Roadmap</h2>
+    <p>Named plainly rather than glossed over — these are the gaps that matter architecturally, distinct from the smaller per-module <code>TODO</code> markers scattered through the codebase.</p>
+    <table>
+      <thead><tr><th>Gap</th><th>Why it matters</th></tr></thead>
+      <tbody>
+        <tr><td>Confidence score is a fixed placeholder</td><td>Escalation itself is still correct (policy rules + <code>agent_unresolved</code> don't depend on it), but there's no real signal for "how sure was the agent" yet</td></tr>
+        <tr><td>Single-tenant policy thresholds</td><td>Refund/threshold values are global constants, not per-tenant configuration — a multi-tenant deployment would need this first</td></tr>
+        <tr><td>No correlation-ID / centralized error middleware</td><td>Tracing a single request across logs today relies on timestamps and ticket IDs, not a request-scoped correlation ID</td></tr>
+        <tr><td>Only one agent tool exists (knowledge base)</td><td>Billing-system and ticketing/CRM lookups are scaffolded but not implemented — agents can answer from documentation, not live account data</td></tr>
+        <tr><td>Logging is plain-text, not structured</td><td>No JSON log formatter yet, so log aggregation would need a parser rather than ingesting structured fields directly</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div class="resources" id="resources">
+    <p class="resources-title">Resources</p>
+    <p class="resources-sub">Want to verify or explore this further? Here you go.</p>
+    <ul class="resource-list">
+      <li>
+        <span class="r-label"><strong>GitHub repository</strong><small>Full source, commit history, 167 passing tests</small></span>
+        <a href="https://github.com/Terrytd0/Supportops-AI" target="_blank" rel="noopener">github.com/Terrytd0/Supportops-AI</a>
+      </li>
+      <li>
+        <span class="r-label"><strong>README</strong><small>Setup, feature list, architecture overview</small></span>
+        <a href="https://github.com/Terrytd0/Supportops-AI/blob/main/README.md" target="_blank" rel="noopener">README.md</a>
+      </li>
+      <li>
+        <span class="r-label"><strong>Demo video</strong><small>Live walkthrough of the workflow end to end</small></span>
+        <a href="https://drive.google.com/file/d/1l83yIoBXb22EAfT8fKwjv2sd-idlKNDQ/view?usp=drive_link" target="_blank" rel="noopener">Watch on Google Drive</a>
+      </li>
+      <li>
+        <span class="r-label"><strong>Case Study</strong><small>The companion document to this architecture reference</small></span>
+        <a href="case-study.html">case-study.pdf</a>
+      </li>
+      <li>
+        <span class="r-label"><strong>Full docs folder</strong><small>Architecture, requirements, ADRs, design review</small></span>
+        <a href="https://github.com/Terrytd0/Supportops-AI/tree/main/docs" target="_blank" rel="noopener">docs/</a>
+      </li>
+    </ul>
+  </div>
+
+  <div class="doc-footer">
+    <span>SupportOps AI</span>
+    <span>Technical Architecture · Self-directed portfolio project</span>
+  </div>
+
+</div>
+</body>
+</html>

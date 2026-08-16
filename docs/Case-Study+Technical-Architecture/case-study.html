@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SupportOps AI — Case Study</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="doc">
+
+  <div class="cover-block">
+    <p class="cover-kicker">Case Study</p>
+    <h1 class="cover-title">SupportOps AI</h1>
+    <p class="cover-subtitle">A multi-agent customer support platform where AI agents triage and draft responses, but a deterministic policy engine — not the model — decides what's safe to send automatically.</p>
+
+    <div class="cover-disclosure">
+      <strong>Self-directed portfolio project.</strong> Not a production deployment for a real company. It was built to practice a genuinely hard distributed-systems problem — orchestrating stateful AI agents safely — rather than a toy chatbot demo. Every technical claim below is verified directly against the current codebase and its 167-test suite, and every open gap is stated plainly rather than glossed over — see <a href="#resources">Resources</a>.
+    </div>
+
+    <div class="badge-row">
+      <span class="badge">FastAPI</span>
+      <span class="badge">LangGraph</span>
+      <span class="badge">CrewAI</span>
+      <span class="badge">PostgreSQL</span>
+      <span class="badge">Redis</span>
+      <span class="badge alt2">167 Tests Passing</span>
+    </div>
+  </div>
+
+  <section class="section">
+    <p class="section-num">1 · The Problem</p>
+    <h2 class="section-title">Support triage is repetitive, but the risky 5% can't be automated blindly</h2>
+    <p>Support teams field a high volume of billing, technical, and account questions that follow predictable patterns — good candidates for AI triage and drafting. But a fraction of tickets involve refunds, legal threats, security incidents, or fraud, where an autonomous AI response is the wrong failure mode entirely. The problem isn't "can an LLM answer support tickets" — it's building a system that knows the difference and routes accordingly, every time, with a record of why.</p>
+    <ul>
+      <li>Classifying and routing tickets to the right specialist consistently</li>
+      <li>Keeping specialist answers grounded in real product knowledge, not invented</li>
+      <li>Recognizing high-risk tickets (refund, legal, security, fraud) and holding them for a human</li>
+      <li>Making retries and duplicate submissions safe instead of silently creating duplicate tickets</li>
+      <li>Producing an audit trail for every automated and human decision</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <p class="section-num">2 · Objectives</p>
+    <h2 class="section-title">Real reasoning, deterministic guardrails</h2>
+    <p>The system had to keep two things separate on purpose: what the AI is allowed to decide, and what a policy engine decides for it.</p>
+    <div class="col-2">
+      <ul>
+        <li><strong>Real specialist reasoning</strong> — CrewAI agents grounded in an actual knowledge base, not scripted replies</li>
+        <li><strong>Deterministic escalation</strong> — a policy engine, not the model, decides what needs human approval</li>
+        <li><strong>Idempotent intake</strong> — a retried request must never create a duplicate ticket</li>
+      </ul>
+      <ul>
+        <li><strong>Postgres as the system of record</strong> — Redis can fail without losing business data</li>
+        <li><strong>A full audit trail</strong> — every automated action and every human approve/edit/reject is logged</li>
+      </ul>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-tile">
+        <p class="stat-number">4</p>
+        <p class="stat-caption">specialist agents: billing, technical, account, general</p>
+      </div>
+      <div class="stat-tile">
+        <p class="stat-number">6</p>
+        <p class="stat-caption">node LangGraph workflow, fixed topology</p>
+      </div>
+      <div class="stat-tile">
+        <p class="stat-number">8</p>
+        <p class="stat-caption">policy triggers routing tickets to human review</p>
+      </div>
+      <div class="stat-tile">
+        <p class="stat-number">167</p>
+        <p class="stat-caption">automated tests across unit + integration</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <p class="section-num">3 · Solution</p>
+    <h2 class="section-title">LangGraph owns control flow; CrewAI owns reasoning</h2>
+    <p>LangGraph compiles a fixed six-node graph that owns ticket state, classification, routing, and escalation. CrewAI supplies the domain specialists it calls into — each grounded by a Postgres-backed knowledge tool — but a specialist never controls the workflow or decides its own escalation; it can only report that it's unresolved, and the policy engine decides what happens next.</p>
+    <div class="pipeline">
+      <div class="pipeline-stage tint-blue"><p class="stage-name">Load Ticket</p><p class="stage-sub">state init</p></div>
+      <span class="pipeline-arrow">→</span>
+      <div class="pipeline-stage tint-gray"><p class="stage-name">Classify</p><p class="stage-sub">OpenAI, cached</p></div>
+      <span class="pipeline-arrow">→</span>
+      <div class="pipeline-stage tint-gray"><p class="stage-name">Select Agent</p><p class="stage-sub">deterministic</p></div>
+      <span class="pipeline-arrow">→</span>
+      <div class="pipeline-stage tint-purple"><p class="stage-name">Execute Agent</p><p class="stage-sub">CrewAI + KB</p></div>
+      <span class="pipeline-arrow">→</span>
+      <div class="pipeline-stage tint-orange"><p class="stage-name">Confidence Eval</p><p class="stage-sub">policy engine</p></div>
+      <span class="pipeline-arrow">→</span>
+      <div class="pipeline-stage tint-green"><p class="stage-name">Persist</p><p class="stage-sub">Postgres</p></div>
+    </div>
+    <p class="pipeline-caption">The graph's topology has stayed fixed since it was first built — every node went from placeholder to a real implementation without changing the shape of the workflow.</p>
+  </section>
+
+  <section class="section">
+    <p class="section-num">4 · Technologies Used</p>
+    <h2 class="section-title">Stack</h2>
+    <div class="tech-grid">
+      <div class="tech-item"><span class="tech-dot"></span><div><strong>FastAPI</strong><span>HTTP layer, JWT/OAuth2-protected routes</span></div></div>
+      <div class="tech-item"><span class="tech-dot"></span><div><strong>LangGraph</strong><span>Stateful workflow orchestration</span></div></div>
+      <div class="tech-item"><span class="tech-dot"></span><div><strong>CrewAI</strong><span>Role-based specialist agents</span></div></div>
+      <div class="tech-item"><span class="tech-dot"></span><div><strong>OpenAI</strong><span>Structured-output classification + agent reasoning</span></div></div>
+      <div class="tech-item"><span class="tech-dot"></span><div><strong>PostgreSQL</strong><span>System of record — tickets, approvals, audit logs</span></div></div>
+      <div class="tech-item"><span class="tech-dot"></span><div><strong>Redis</strong><span>Rate limiting, idempotency, caching, checkpoints</span></div></div>
+      <div class="tech-item"><span class="tech-dot"></span><div><strong>SQLAlchemy + Alembic</strong><span>Async ORM + real per-table migrations</span></div></div>
+      <div class="tech-item"><span class="tech-dot"></span><div><strong>pytest</strong><span>167-test suite, unit + integration</span></div></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <p class="section-num">5 · Challenges Solved</p>
+    <h2 class="section-title">The distributed-systems edges, not the chatbot part</h2>
+    <div class="card-grid">
+      <div class="card">
+        <h4>Two event loops, one shared client</h4>
+        <p>FastAPI's request loop and a dedicated background loop bridging LangGraph's synchronous nodes each need their own Redis/Postgres client — sharing one across both used to crash with a <code>RuntimeError</code>, and for Postgres specifically could poison a pooled connection so a later, unrelated request would 500. Fixed by handing out one client/engine per calling event loop.</p>
+      </div>
+      <div class="card">
+        <h4>Choosing failure mode per feature, not uniformly</h4>
+        <p>Caching and workflow checkpoints fail <em>open</em> — a miss just recomputes. Idempotency fails <em>closed</em> — <code>POST /tickets</code> returns 503 if Redis is unreachable, because silently proceeding could let a duplicate ticket through. Same infrastructure, deliberately different guarantees per feature.</p>
+      </div>
+      <div class="card">
+        <h4>Keeping agents grounded, not freelancing</h4>
+        <p>Specialist agents answer only from a Postgres-backed knowledge-base tool (Redis-cached), not from open-ended model knowledge — so an answer can be traced back to a real reference article instead of the model's own guess.</p>
+      </div>
+      <div class="card">
+        <h4>Separating "AI reports" from "policy decides"</h4>
+        <p>A CrewAI agent can report that it's unresolved, but it never decides escalation itself. That decision belongs entirely to <code>policy/rules.py</code>'s deterministic keyword/threshold checks — an explicit design boundary between reasoning and control.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <p class="section-num">6 · Architecture</p>
+    <h2 class="section-title">Postgres is the system of record; Redis is disposable</h2>
+    <p>PostgreSQL holds every piece of business data — tickets, approval requests, audit logs, users. Redis only ever holds data that can safely expire or be rebuilt: rate-limit counters, idempotency claims, workflow checkpoints, and AI/knowledge-base caches. A Redis outage never puts business data at risk — the one exception is idempotency, which fails closed by design (see Section 5).</p>
+    <figure>
+      <img src="assets/02-workflow.png" alt="Compiled LangGraph workflow graph">
+      <figcaption style="font-size:11.8px;color:var(--muted);font-style:italic;margin-top:6px;">The compiled LangGraph workflow graph, rendered via <code>backend.scripts.export_workflow</code>.</figcaption>
+    </figure>
+  </section>
+
+  <section class="section">
+    <p class="section-num">7 · AI Workflow</p>
+    <h2 class="section-title">Classification, reasoning, and escalation are three separate steps</h2>
+    <div class="pipeline">
+      <div class="pipeline-stage tint-purple"><p class="stage-name">classify_ticket</p><p class="stage-sub">OpenAI structured output</p></div>
+      <span class="pipeline-arrow">→</span>
+      <div class="pipeline-stage tint-purple"><p class="stage-name">execute_agent</p><p class="stage-sub">CrewAI + KB tool</p></div>
+      <span class="pipeline-arrow">→</span>
+      <div class="pipeline-stage tint-orange"><p class="stage-name">confidence_evaluation</p><p class="stage-sub">policy/rules.py</p></div>
+      <span class="pipeline-arrow">→</span>
+      <div class="pipeline-stage tint-blue"><p class="stage-name">Supervisor Queue</p><p class="stage-sub">if flagged</p></div>
+    </div>
+    <p class="pipeline-caption" style="margin-top:14px;"><strong>Guardrail:</strong> escalation triggers on deterministic keyword/threshold rules (refund, legal, lawsuit, attorney, security, breach, fraud, low-confidence) plus a structured <code>agent_unresolved</code> signal the agent reports — never a decision the model makes for itself. Flagged tickets become a real <code>ApprovalRequest</code> row a Supervisor/Admin can view, edit, approve, or reject, each action writing its own audit log row.</p>
+  </section>
+
+  <section class="section">
+    <p class="section-num">8 · Testing</p>
+    <h2 class="section-title">167 tests, real integration coverage included</h2>
+    <p>159 unit tests run fully mocked (Redis via <code>fakeredis</code>, Postgres via test doubles) and finish fast with no external services. 8 integration tests exercise real Redis and/or Postgres — including the cross-event-loop regression from Section 5 — and skip themselves automatically if the service they need isn't reachable, so a plain <code>pytest</code> run is always safe.</p>
+    <table>
+      <thead><tr><th>Area</th><th>What's verified</th></tr></thead>
+      <tbody>
+        <tr><td>Graph nodes</td><td>classify, execute_agent, persist_results, checkpointing behavior</td></tr>
+        <tr><td>Policy engine</td><td>Escalation rules and adversarial-input handling</td></tr>
+        <tr><td>Supervisor API</td><td>Queue listing, approve/edit/reject, adversarial cases</td></tr>
+        <tr><td>Services</td><td>Idempotency store, audit logging, ticket creation + execution</td></tr>
+        <tr><td>Core infra</td><td>Rate limiting, caching, async utils, Redis client lifecycle</td></tr>
+        <tr><td>Integration</td><td>Real Redis+Postgres ticket workflow, cross-loop client isolation, live schema-vs-model drift</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <p class="section-num">9 · Results</p>
+    <h2 class="section-title">What's verified vs. what's still open</h2>
+    <div class="stat-row">
+      <div class="stat-tile">
+        <p class="stat-number">167 / 167</p>
+        <p class="stat-caption">automated tests passing</p>
+        <span class="stat-flag verified">VERIFIED</span>
+      </div>
+      <div class="stat-tile">
+        <p class="stat-number">5</p>
+        <p class="stat-caption">endpoints backed by real Postgres logic, not stubs</p>
+        <span class="stat-flag verified">VERIFIED</span>
+      </div>
+      <div class="stat-tile">
+        <p class="stat-number">1</p>
+        <p class="stat-caption">confidence score still a fixed placeholder, not model-derived</p>
+        <span class="stat-flag target">OPEN GAP</span>
+      </div>
+      <div class="stat-tile">
+        <p class="stat-number">0</p>
+        <p class="stat-caption">tenants — single-tenant policy thresholds today</p>
+        <span class="stat-flag target">OPEN GAP</span>
+      </div>
+    </div>
+    <p style="font-size:12.6px;font-style:italic;">This is a portfolio build, not a live deployment — there's no production ticket volume to report. The open gaps above are called out on purpose; see Section 2 of the <a href="technical-architecture.html">Technical Architecture</a> doc for the full status table.</p>
+  </section>
+
+  <section class="section">
+    <p class="section-num">10 · Screenshots</p>
+    <h2 class="section-title">Evidence, not mockups</h2>
+    <div class="shot-grid">
+      <figure><img src="assets/01-authentication-flow.png" alt="Authentication flow"><figcaption><strong>Authentication flow</strong> — JWT login via Swagger UI</figcaption></figure>
+      <figure><img src="assets/02-workflow.png" alt="Compiled workflow graph"><figcaption><strong>Workflow graph</strong> — the compiled LangGraph pipeline</figcaption></figure>
+      <figure><img src="assets/03-langgraph-smoke-test.png" alt="LangGraph smoke test"><figcaption><strong>LangGraph smoke test</strong> — a real ticket run through the graph</figcaption></figure>
+      <figure><img src="assets/04-supervisor-api-smoke-test.png" alt="Supervisor API smoke test"><figcaption><strong>Supervisor API</strong> — approval queue smoke test</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="section">
+    <p class="section-num">11 · Key Takeaways</p>
+    <h2 class="section-title">What this build was really practicing</h2>
+    <div class="takeaway-grid">
+      <div class="takeaway"><span class="num">1</span><p>Separating "the AI decides" from "policy decides" at a hard boundary is what makes autonomous agent behavior safe to ship.</p></div>
+      <div class="takeaway"><span class="num">2</span><p>Ephemeral infrastructure (Redis) and system-of-record data (Postgres) need explicitly different failure modes, chosen per feature.</p></div>
+      <div class="takeaway"><span class="num">3</span><p>Grounding agents in a real retrieval tool, not open-ended model knowledge, is what makes their answers auditable.</p></div>
+      <div class="takeaway"><span class="num">4</span><p>Multi-event-loop bugs are invisible until you specifically test the interaction — a smoke test alone wouldn't have caught the cross-loop connection poisoning.</p></div>
+      <div class="takeaway"><span class="num">5</span><p>An idempotent write path is a correctness requirement, not a nice-to-have, the moment retries are possible.</p></div>
+      <div class="takeaway"><span class="num">6</span><p>Naming a fixed-value placeholder honestly (<code>_PLACEHOLDER_CONFIDENCE_SCORE</code>) in the code and the docs beats quietly presenting it as calibrated.</p></div>
+    </div>
+  </section>
+
+  <div class="resources" id="resources">
+    <p class="resources-title">Resources</p>
+    <p class="resources-sub">Want to verify or explore this further? Here you go.</p>
+    <ul class="resource-list">
+      <li>
+        <span class="r-label"><strong>GitHub repository</strong><small>Full source, commit history, 167 passing tests</small></span>
+        <a href="https://github.com/Terrytd0/Supportops-AI" target="_blank" rel="noopener">github.com/Terrytd0/Supportops-AI</a>
+      </li>
+      <li>
+        <span class="r-label"><strong>README</strong><small>Setup, feature list, architecture overview</small></span>
+        <a href="https://github.com/Terrytd0/Supportops-AI/blob/main/README.md" target="_blank" rel="noopener">README.md</a>
+      </li>
+      <li>
+        <span class="r-label"><strong>Demo video</strong><small>Live walkthrough of the workflow end to end</small></span>
+        <a href="https://drive.google.com/file/d/1l83yIoBXb22EAfT8fKwjv2sd-idlKNDQ/view?usp=drive_link" target="_blank" rel="noopener">Watch on Google Drive</a>
+      </li>
+      <li>
+        <span class="r-label"><strong>ADR-001</strong><small>LangGraph vs. CrewAI, and why the project uses both</small></span>
+        <a href="https://github.com/Terrytd0/Supportops-AI/blob/main/docs/adr/ADR-001-langgraph-vs-crewai.md" target="_blank" rel="noopener">docs/adr/ADR-001-langgraph-vs-crewai.md</a>
+      </li>
+      <li>
+        <span class="r-label"><strong>Technical Architecture</strong><small>The companion document to this case study</small></span>
+        <a href="technical-architecture.html">technical-architecture.pdf</a>
+      </li>
+      <li>
+        <span class="r-label"><strong>Full docs folder</strong><small>Architecture, requirements, ADRs, design review</small></span>
+        <a href="https://github.com/Terrytd0/Supportops-AI/tree/main/docs" target="_blank" rel="noopener">docs/</a>
+      </li>
+    </ul>
+  </div>
+
+  <div class="doc-footer">
+    <span>SupportOps AI · Case Study</span>
+    <span>Self-directed portfolio project</span>
+  </div>
+
+</div>
+</body>
+</html>
